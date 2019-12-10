@@ -52,6 +52,7 @@ static bool shouldEmitLifetimeMarkers(const CodeGenOptions &CGOpts,
 
   // Sanitizers may use markers.
   if (CGOpts.SanitizeAddressUseAfterScope ||
+      LangOpts.Sanitize.hasOneOf(SanitizerKind::CFI) ||
       LangOpts.Sanitize.has(SanitizerKind::HWAddress) ||
       LangOpts.Sanitize.has(SanitizerKind::Memory))
     return true;
