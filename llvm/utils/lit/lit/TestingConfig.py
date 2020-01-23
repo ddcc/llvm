@@ -27,7 +27,7 @@ class TestingConfig(object):
                      'SANITIZER_IGNORE_CVE_2016_2143', 'TMPDIR', 'TMP', 'TEMP',
                      'TEMPDIR', 'AVRLIT_BOARD', 'AVRLIT_PORT',
                      'FILECHECK_OPTS', 'VCINSTALLDIR', 'VCToolsinstallDir',
-                     'VSINSTALLDIR', 'WindowsSdkDir', 'WindowsSDKLibVersion']
+                     'VSINSTALLDIR', 'WindowsSdkDir', 'WindowsSDKLibVersion', 'XDG_RUNTIME_DIR']
 
         if sys.platform == 'win32':
             pass_vars.append('INCLUDE')
