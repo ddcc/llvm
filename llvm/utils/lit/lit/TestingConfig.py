@@ -28,7 +28,7 @@ class TestingConfig:
                      'TEMPDIR', 'AVRLIT_BOARD', 'AVRLIT_PORT',
                      'FILECHECK_DUMP_INPUT_ON_FAILURE', 'FILECHECK_OPTS',
                      'VCINSTALLDIR', 'VCToolsinstallDir', 'VSINSTALLDIR',
-                     'WindowsSdkDir', 'WindowsSDKLibVersion']
+                     'WindowsSdkDir', 'WindowsSDKLibVersion', 'XDG_RUNTIME_DIR']
 
         if sys.platform == 'win32':
             pass_vars.append('INCLUDE')
