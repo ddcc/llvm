@@ -68,6 +68,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include <cassert>
 #include <cstdint>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -1824,32 +1825,45 @@ static bool isPointerValueDeadOnEntryToFunction(
   // We don't do an exhaustive search for memory operations - simply look
   // through bitcasts as they're quite common and benign.
   const DataLayout &DL = GV->getParent()->getDataLayout();
-  SmallVector<LoadInst *, 4> Loads;
-  SmallVector<StoreInst *, 4> Stores;
-  for (auto *U : GV->users()) {
-    if (Operator::getOpcode(U) == Instruction::BitCast) {
-      for (auto *UU : U->users()) {
-        if (auto *LI = dyn_cast<LoadInst>(UU))
-          Loads.push_back(LI);
-        else if (auto *SI = dyn_cast<StoreInst>(UU))
-          Stores.push_back(SI);
-        else
+  SmallVector<std::pair<const Instruction *, Type *>, 4> Loads;
+  SmallVector<const StoreInst *, 4> Stores;
+  SmallVector<const Value *, 4> Roots;
+
+  Roots.push_back(GV);
+  while (Roots.size()) {
+    const Value *R = Roots.pop_back_val();
+    for (auto &U : R->uses()) {
+      User *UU = U.getUser();
+      if (Operator::getOpcode(UU) == Instruction::BitCast)
+        Roots.push_back(UU);
+      else if (auto *LI = dyn_cast<LoadInst>(UU))
+        Loads.push_back(std::make_pair<>(LI, LI->getType()));
+      else if (auto *SI = dyn_cast<StoreInst>(UU))
+        Stores.push_back(SI);
+      else if (auto *CB = dyn_cast<CallBase>(UU)) {
+        // TODO: Handle isDroppable() case
+        if (!CB->isArgOperand(&U))
           return false;
-      }
-      continue;
+        unsigned ArgNo = CB->getArgOperandNo(&U);
+        // Argument must not be captured for subsequent use
+        if (!CB->paramHasAttr(ArgNo, Attribute::NoCapture))
+          return false;
+        // Depending on attributes, either treat calls as load at the
+        // call site, or ignore them if they are not going to be dereferenced.
+        if (CB->hasFnAttr(Attribute::InaccessibleMemOnly) ||
+            CB->hasFnAttr(Attribute::ReadNone) ||
+            CB->paramHasAttr(ArgNo, Attribute::ReadNone))
+          continue;
+        else if (CB->hasFnAttr(Attribute::ReadOnly) ||
+                 CB->paramHasAttr(ArgNo, Attribute::ReadOnly)) {
+          // Assume that in the worst case, the entire type is accessed
+          Loads.push_back({CB, GV->getType()->getPointerElementType()});
+        } else {
+          return false;
+        }
+      } else
+        return false;
     }
-
-    Instruction *I = dyn_cast<Instruction>(U);
-    if (!I)
-      return false;
-    assert(I->getParent()->getParent() == F);
-
-    if (auto *LI = dyn_cast<LoadInst>(I))
-      Loads.push_back(LI);
-    else if (auto *SI = dyn_cast<StoreInst>(I))
-      Stores.push_back(SI);
-    else
-      return false;
   }
 
   // We have identified all uses of GV into loads and stores. Now check if all
@@ -1871,8 +1885,10 @@ static bool isPointerValueDeadOnEntryToFunction(
   if (Loads.size() * Stores.size() > Threshold)
     return false;
 
-  for (auto *L : Loads) {
-    auto *LTy = L->getType();
+  for (auto &LP : Loads) {
+    Type *LTy;
+    const Instruction *L;
+    std::tie(L, LTy) = LP;
     if (none_of(Stores, [&](const StoreInst *S) {
           auto *STy = S->getValueOperand()->getType();
           // The load is only dominated by the store if DomTree says so

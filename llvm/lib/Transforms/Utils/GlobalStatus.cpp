@@ -164,9 +164,26 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
           return true;
         GS.StoredType = GlobalStatus::Stored;
       } else if (const auto *CB = dyn_cast<CallBase>(I)) {
-        if (!CB->isCallee(&U))
+        if (CB->isCallee(&U)) {
+          GS.IsLoaded = true;
+        } else if (CB->isArgOperand(&U)) {
+          unsigned ArgNo = CB->getArgOperandNo(&U);
+          // Argument must not be captured for subsequent use
+          if (!CB->paramHasAttr(ArgNo, Attribute::NoCapture))
+            return true;
+          // Depending on attributes, treat the operand as a pure call or load
+          // at the call site.
+          if (CB->hasFnAttr(Attribute::InaccessibleMemOnly) ||
+              CB->hasFnAttr(Attribute::ReadNone) ||
+              CB->paramHasAttr(ArgNo, Attribute::ReadNone))
+            continue;
+          else if (CB->hasFnAttr(Attribute::ReadOnly) ||
+                   CB->paramHasAttr(ArgNo, Attribute::ReadOnly))
+            GS.IsLoaded = true;
+          else
+            return true;
+        } else
           return true;
-        GS.IsLoaded = true;
       } else {
         return true; // Any other non-load instruction might take address!
       }
