@@ -76,6 +76,23 @@ define i1 @return_true() norecurse {
     %cast = bitcast i32* %var to i16*
     %ret = call zeroext i1 @is_same(i32* nonnull %var, i16* nonnull %cast)
     ret i1 %ret
+
+declare void @foo3(i32, i8) local_unnamed_addr readnone
+
+; Doesn't read from casted pointer argument
+define i32 @c() norecurse {
+; CHECK-LABEL: @c
+; CHECK: alloca
+; CHECK-NOT: %g3
+; CHECK-NOT: ptrtoint
+; CHECK: ret i32 42
+; CHECK: }
+    %g3 = alloca i32
+    store i32 42, i32 *%g3
+    %p = ptrtoint i32* %g3 to i32
+    call void @foo3(i32 %p, i8 0)
+    %c = load i32, i32* %g3
+    ret i32 %c
 }
 
 ; Bitcast dominates loads/stores, not promotable

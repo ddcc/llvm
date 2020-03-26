@@ -112,6 +112,9 @@ bool llvm::isAllocaPromotable(const AllocaInst *AI) {
         return false;
       if (!onlyUsedByLifetimeMarkers(BCI))
         return false;
+    } else if (auto PtrToInt *PTI = dyn_cast<PtrToInt>(U)) {
+      if (!(PTI->hasOneUse() && onlyUsedByOptimizableCall(PTI->use_begin())))
+        return false;
     } else if (const GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(U)) {
       if (GEPI->getType() != Type::getInt8PtrTy(U->getContext(), AS))
         return false;
@@ -353,7 +356,8 @@ static void removeNonLoadStoreUsers(AllocaInst *AI) {
       ++UI;
       if (isa<LoadInst>(I) || isa<StoreInst>(I))
         continue;
-      else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I))
+      else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I) ||
+               isa<PtrToIntInst>(I))
         Roots.push_back(I);
       else if (isa<CallBase>(I) && !isa<IntrinsicInst>(I)) {
         // Introduce a fresh alloca for this readnone operand, because it

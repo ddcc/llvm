@@ -69,9 +69,9 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
     if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(UR)) {
       GS.HasNonInstructionUser = true;
 
-      // If the result of the constantexpr isn't pointer type, then we won't
-      // know to expect it in various places.  Just reject early.
-      if (!isa<PointerType>(CE->getType()))
+      // If the result of the constantexpr isn't pointer/integer type, then we
+      // won't know to expect it in various places.  Just reject early.
+      if (!isa<PointerType>(CE->getType()) && !isa<IntegerType>(CE->getType()))
         return true;
 
       // FIXME: Do we need to add constexpr selects to VisitedUsers?
@@ -137,7 +137,8 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
             GS.StoredType = GlobalStatus::Stored;
           }
         }
-      } else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I)) {
+      } else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I) ||
+                 isa<PtrToIntInst>(I)) {
         // Skip over bitcasts and GEPs; we don't care about the type or offset
         // of the pointer.
         if (analyzeGlobalAux(I, GS, VisitedUsers))
@@ -160,8 +161,7 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
         if (MTI->getArgOperand(1) == V)
           GS.IsLoaded = true;
       } else if (const MemSetInst *MSI = dyn_cast<MemSetInst>(I)) {
-        assert(MSI->getArgOperand(0) == V && "Memset only takes one pointer!");
-        if (MSI->isVolatile())
+        if (MSI->isVolatile() || MSI->getArgOperand(0) != V)
           return true;
         GS.StoredType = GlobalStatus::Stored;
       } else if (const CallBase *CB = dyn_cast<CallBase>(I)) {
@@ -170,7 +170,8 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
         } else if (CB->isArgOperand(&U)) {
           unsigned ArgNo = CB->getArgOperandNo(&U);
           // Argument must not be captured for subsequent use
-          if (!CB->paramHasAttr(ArgNo, Attribute::NoCapture))
+          if (U->getType()->isPointerTy() &&
+              !CB->paramHasAttr(ArgNo, Attribute::NoCapture))
             return true;
           // Depending on attributes, treat the operand as a pure call or load
           // at the call site.

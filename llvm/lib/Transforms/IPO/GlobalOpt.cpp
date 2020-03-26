@@ -1816,7 +1816,8 @@ static bool isPointerValueDeadOnEntryToFunction(
     const Value *R = Roots.pop_back_val();
     for (auto &U : R->uses()) {
       User *UU = U.getUser();
-      if (Operator::getOpcode(UU) == Instruction::BitCast)
+      const unsigned OpCode = Operator::getOpcode(UU);
+      if (OpCode == Instruction::BitCast || OpCode == Instruction::PtrToInt)
         Roots.push_back(UU);
       else if (auto *LI = dyn_cast<LoadInst>(UU))
         Loads.push_back(std::make_pair<>(LI, LI->getType()));
@@ -1828,7 +1829,8 @@ static bool isPointerValueDeadOnEntryToFunction(
           return false;
         unsigned ArgNo = CB->getArgOperandNo(&U);
         // Argument must not be captured for subsequent use
-        if (!CB->paramHasAttr(ArgNo, Attribute::NoCapture))
+        if (U->getType()->isPointerTy() &&
+            !CB->paramHasAttr(ArgNo, Attribute::NoCapture))
           return false;
         // Depending on attributes, either treat calls as load at the
         // call site, or ignore them if they are not going to be dereferenced.

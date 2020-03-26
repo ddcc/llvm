@@ -78,3 +78,20 @@ define i32 @d() norecurse {
     %d = load i32, i32* @G4
     ret i32 %d
 }
+
+declare void @foo5(i32, i8) local_unnamed_addr readnone
+
+@G5 = internal global i32 0
+
+; Doesn't read from casted pointer argument
+define i32 @e() norecurse {
+; CHECK-LABEL: @e
+; CHECK: alloca
+; CHECK-NOT: @G5
+; CHECK: }
+    store i32 42, i32 *@G5
+    %p = ptrtoint i32* @G5 to i8
+    call void @foo5(i32 ptrtoint (i32* @G5 to i32), i8 %p)
+    %e = load i32, i32* @G5
+    ret i32 %e
+}
