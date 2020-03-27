@@ -25,7 +25,6 @@
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/IteratedDominanceFrontier.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -44,7 +43,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
+#include "llvm/IR/ValueMap.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include <algorithm>
 #include <cassert>
@@ -61,13 +62,32 @@ STATISTIC(NumSingleStore,   "Number of alloca's promoted with a single store");
 STATISTIC(NumDeadAlloca,    "Number of dead alloca's removed");
 STATISTIC(NumPHIInsert,     "Number of PHI nodes inserted");
 
+static bool onlyUsedByOptimizableCall(const Use &U) {
+  const Instruction *I = dyn_cast<Instruction>(U.getUser());
+  if (const CallBase *CB = dyn_cast_or_null<CallBase>(I)) {
+    if (!CB->isArgOperand(&U))
+      return false;
+    unsigned ArgNo = CB->getArgOperandNo(&U);
+    // Argument must be not be captured or accessed
+    if (CB->paramHasAttr(ArgNo, Attribute::NoCapture) &&
+        (CB->hasFnAttr(Attribute::InaccessibleMemOnly) ||
+         CB->hasFnAttr(Attribute::ReadNone) ||
+         CB->paramHasAttr(ArgNo, Attribute::ReadNone)))
+      return true;
+  }
+
+  return false;
+}
+
 bool llvm::isAllocaPromotable(const AllocaInst *AI) {
+  bool usedByOtherInsts = !AI->getNumUses();
   // FIXME: If the memory unit is of pointer or integer type, we can permit
   // assignments to subsections of the memory unit.
   unsigned AS = AI->getType()->getAddressSpace();
 
   // Only allow direct and non-volatile loads and stores...
-  for (const User *U : AI->users()) {
+  for (const Use &UU : AI->uses()) {
+    const User *U = UU.getUser();
     if (const LoadInst *LI = dyn_cast<LoadInst>(U)) {
       // Note that atomic loads can be transformed; atomic semantics do
       // not have any meaning for a local alloca.
@@ -83,7 +103,11 @@ bool llvm::isAllocaPromotable(const AllocaInst *AI) {
     } else if (const IntrinsicInst *II = dyn_cast<IntrinsicInst>(U)) {
       if (!II->isLifetimeStartOrEnd())
         return false;
+    } else if (isa<CallBase>(U) && onlyUsedByOptimizableCall(UU)) {
+      continue;
     } else if (const BitCastInst *BCI = dyn_cast<BitCastInst>(U)) {
+      if (BCI->hasOneUse() && onlyUsedByOptimizableCall(*BCI->use_begin()))
+        continue;
       if (BCI->getType() != Type::getInt8PtrTy(U->getContext(), AS))
         return false;
       if (!onlyUsedByLifetimeMarkers(BCI))
@@ -95,12 +119,14 @@ bool llvm::isAllocaPromotable(const AllocaInst *AI) {
         return false;
       if (!onlyUsedByLifetimeMarkers(GEPI))
         return false;
-    } else {
+    } else
       return false;
-    }
+    usedByOtherInsts = true;
   }
 
-  return true;
+  // Not promotable because it is a fresh alloca (only used by bitcasts and/or
+  // as a non-accessed and non-capturing function call operand).
+  return usedByOtherInsts;
 }
 
 namespace {
@@ -186,7 +212,6 @@ class LargeBlockInfo {
   DenseMap<const Instruction *, unsigned> InstNumbers;
 
 public:
-
   /// This code only looks at accesses to allocas.
   static bool isInterestingInstruction(const Instruction *I) {
     return (isa<LoadInst>(I) && isa<AllocaInst>(I->getOperand(0))) ||
@@ -312,27 +337,54 @@ static void addAssumeNonNull(AssumptionCache *AC, LoadInst *LI) {
   AC->registerAssumption(CI);
 }
 
-static void removeLifetimeIntrinsicUsers(AllocaInst *AI) {
+static void removeNonLoadStoreUsers(AllocaInst *AI) {
+  SmallVector<Instruction *, 4> Roots;
+  ValueMap<Instruction *, Instruction *> VisitedMap;
+  AllocaInst *NewAlloca = nullptr;
+
   // Knowing that this alloca is promotable, we know that it's safe to kill all
   // instructions except for load and store.
-
-  for (auto UI = AI->user_begin(), UE = AI->user_end(); UI != UE;) {
-    Instruction *I = cast<Instruction>(*UI);
-    ++UI;
-    if (isa<LoadInst>(I) || isa<StoreInst>(I))
-      continue;
-
-    if (!I->getType()->isVoidTy()) {
-      // The only users of this bitcast/GEP instruction are lifetime intrinsics.
-      // Follow the use/def chain to erase them now instead of leaving it for
-      // dead code elimination later.
-      for (auto UUI = I->user_begin(), UUE = I->user_end(); UUI != UUE;) {
-        Instruction *Inst = cast<Instruction>(*UUI);
-        ++UUI;
-        Inst->eraseFromParent();
-      }
+  Roots.push_back(AI);
+  while (Roots.size()) {
+    Instruction *V = Roots.pop_back_val();
+    auto it = VisitedMap.insert({V, nullptr}).first;
+    for (auto UI = V->user_begin(), UE = V->user_end(); UI != UE;) {
+      Instruction *I = cast<Instruction>(*UI);
+      ++UI;
+      if (isa<LoadInst>(I) || isa<StoreInst>(I))
+        continue;
+      else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I))
+        Roots.push_back(I);
+      else if (isa<CallBase>(I) && !isa<IntrinsicInst>(I)) {
+        // Introduce a fresh alloca for this readnone operand, because it
+        // still needs some stack variable, but doesn't have to be this one.
+        if (!NewAlloca) {
+          NewAlloca = cast<AllocaInst>(AI->clone());
+          NewAlloca->insertBefore(AI);
+        }
+        // Replace the root with either the fresh alloca or a bitcast of it.
+        if (!it->second)
+          it->second = (NewAlloca->getType() == V->getType())
+                           ? cast<Instruction>(NewAlloca)
+                           : new BitCastInst(NewAlloca, V->getType(), "", AI);
+      } else
+        I->eraseFromParent();
     }
-    I->eraseFromParent();
+  }
+
+  // Remove original roots except AI, and change uses to the fresh alloca.
+  for (auto P : VisitedMap) {
+    Instruction *R = P.first, *V = P.second;
+    if (V) {
+      // Only bitcasts and qualifying calls should refer to the fresh alloca.
+      R->replaceUsesWithIf(V, [](Use &U) {
+        Instruction *I = cast<Instruction>(U.getUser());
+        return isa<BitCastInst>(I) || isa<CallBase>(I);
+      });
+    } else if (R != AI)
+      R->dropAllReferences();
+    if (R != AI && !R->getNumUses())
+      R->eraseFromParent();
   }
 }
 
@@ -544,7 +596,7 @@ void PromoteMem2Reg::run() {
     assert(AI->getParent()->getParent() == &F &&
            "All allocas should be in the same function, which is same as DF!");
 
-    removeLifetimeIntrinsicUsers(AI);
+    removeNonLoadStoreUsers(AI);
 
     if (AI->use_empty()) {
       // If there are no uses of the alloca, just delete it now.
