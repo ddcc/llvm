@@ -639,6 +639,15 @@ LLVM-specific variables
   Rewrite absolute source paths in sources and debug info to relative ones. The
   source prefix can be adjusted via the LLVM_SOURCE_PREFIX variable.
 
+**LLVM_USE_SPLIT_DWARF**:BOOL
+  If enabled, store DWARF debug information separately from object files. Enabling
+  this option can speed up build times in Debug configurations.
+
+**LLVM_USE_GDB_INDEX**:BOOL
+  If enabled, generate GDB index tables for locating split DWARF debug
+  information at link time. Enabling this option can speed up GDB debugging
+  startup times in Debug configurations with LLVM_USE_SPLIT_DWARF enabled.
+
 CMake Caches
 ============
 
