@@ -137,7 +137,7 @@ endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   # RHEL7 has ar and ranlib being non-deterministic by default. The D flag forces determinism,
-  # however only GNU version of ar and ranlib (2.27) have this option. 
+  # however only GNU version of ar and ranlib (2.27) have this option.
   # RHEL DTS7 is also affected by this, which uses GNU binutils 2.28
   execute_process(COMMAND ${CMAKE_AR} rD t.a
                   WORKING_DIRECTORY ${CMAKE_BINARY_DIR} RESULT_VARIABLE AR_RESULT OUTPUT_VARIABLE RANLIB_OUTPUT)
@@ -750,6 +750,12 @@ endif()
 # Turn on -gsplit-dwarf if requested
 if(LLVM_USE_SPLIT_DWARF)
   add_definitions("-gsplit-dwarf")
+
+  # Turn on -Wl,--gdb-index if requested and supported
+  if (LLVM_USE_GDB_INDEX AND
+      (LLVM_USE_LINKER STREQUAL "gold" OR LLVM_USE_LINKER STREQUAL "lld"))
+    append("-Wl,--gdb-index" CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS)
+  endif()
 endif()
 
 add_definitions( -D__STDC_CONSTANT_MACROS )

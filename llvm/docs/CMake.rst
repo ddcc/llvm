@@ -631,6 +631,15 @@ LLVM-specific variables
   If enabled, the Z3 constraint solver is activated for the Clang static analyzer.
   A recent version of the z3 library needs to be available on the system.
 
+**LLVM_USE_SPLIT_DWARF**:BOOL
+  If enabled, store DWARF debug information separately from object files. Enabling
+  this option can speed up build times in Debug configurations.
+
+**LLVM_USE_GDB_INDEX**:BOOL
+  If enabled, generate GDB index tables for locating split DWARF debug
+  information at link time. Enabling this option can speed up GDB debugging
+  startup times in Debug configurations with LLVM_USE_SPLIT_DWARF enabled.
+
 CMake Caches
 ============
 
