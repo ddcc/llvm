@@ -792,6 +792,12 @@ if (LLVM_USE_SPLIT_DWARF AND
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
       CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-gsplit-dwarf)
+
+    # Turn on -Wl,--gdb-index if requested and supported
+    if (LLVM_USE_GDB_INDEX AND
+        (LLVM_USE_LINKER STREQUAL "gold" OR LLVM_USE_LINKER STREQUAL "lld"))
+      append("-Wl,--gdb-index" CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS)
+    endif()
   endif()
 endif()
 
