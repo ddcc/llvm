@@ -49,6 +49,7 @@
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/Utils/GlobalStatus.h"
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -488,7 +489,8 @@ ModRefInfo AAResults::getModRefInfo(const StoreInst *S,
   return ModRefInfo::Mod;
 }
 
-ModRefInfo AAResults::getModRefInfo(const FenceInst *S, const MemoryLocation &Loc) {
+ModRefInfo AAResults::getModRefInfo(const FenceInst *S,
+                                    const MemoryLocation &Loc) {
   AAQueryInfo AAQIP;
   return getModRefInfo(S, Loc, AAQIP);
 }
@@ -610,7 +612,8 @@ ModRefInfo AAResults::getModRefInfo(const AtomicRMWInst *RMW,
 ModRefInfo AAResults::getModRefInfo(const AtomicRMWInst *RMW,
                                     const MemoryLocation &Loc,
                                     AAQueryInfo &AAQI) {
-  // Acquire/Release atomicrmw has properties that matter for arbitrary addresses.
+  // Acquire/Release atomicrmw has properties that matter for arbitrary
+  // addresses.
   if (isStrongerThanMonotonic(RMW->getOrdering()))
     return ModRefInfo::ModRef;
 
@@ -646,18 +649,24 @@ ModRefInfo AAResults::callCapturesBefore(const Instruction *I,
 
   const Value *Object =
       GetUnderlyingObject(MemLoc.Ptr, I->getModule()->getDataLayout());
-  if (!isIdentifiedObject(Object) || isa<GlobalValue>(Object) ||
-      isa<Constant>(Object))
+  if (!isIdentifiedObject(Object) ||
+      (!isa<GlobalVariable>(Object) && isa<Constant>(Object)))
     return ModRefInfo::ModRef;
 
   const auto *Call = dyn_cast<CallBase>(I);
   if (!Call || Call == Object)
     return ModRefInfo::ModRef;
 
-  if (PointerMayBeCapturedBefore(Object, /* ReturnCaptures */ true,
-                                 /* StoreCaptures */ true, I, DT,
-                                 /* include Object */ true,
-                                 /* OrderedBasicBlock */ OBB))
+  const auto *GV = dyn_cast<GlobalVariable>(Object);
+  if (GV && GV->hasLocalLinkage()) {
+    // GlobalVariable is only accessed in this function, and is not externally
+    // accessible
+    GlobalStatus GS;
+    if (GlobalStatus::analyzeGlobal(GV, GS) || GS.HasMultipleAccessingFunctions)
+      return ModRefInfo::ModRef;
+  } else if (PointerMayBeCapturedBefore(Object, /* ReturnCaptures */ true,
+                                        /* StoreCaptures */ true, I, DT,
+                                        /* include Object */ true))
     return ModRefInfo::ModRef;
 
   unsigned ArgNo = 0;
@@ -716,7 +725,7 @@ bool AAResults::canInstructionRangeModRef(const Instruction &I1,
          "Instructions not in same basic block!");
   BasicBlock::const_iterator I = I1.getIterator();
   BasicBlock::const_iterator E = I2.getIterator();
-  ++E;  // Convert from inclusive to exclusive range.
+  ++E; // Convert from inclusive to exclusive range.
 
   for (; I != E; ++I) // Check every instruction in range
     if (isModOrRefSet(intersectModRef(getModRefInfo(&*I, Loc), Mode)))
@@ -729,11 +738,6 @@ AAResults::Concept::~Concept() = default;
 
 // Provide a definition for the static object used to identify passes.
 AnalysisKey AAManager::Key;
-
-namespace {
-
-
-} // end anonymous namespace
 
 ExternalAAWrapperPass::ExternalAAWrapperPass() : ImmutablePass(ID) {
   initializeExternalAAWrapperPassPass(*PassRegistry::getPassRegistry());
