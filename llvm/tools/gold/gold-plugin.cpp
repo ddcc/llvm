@@ -23,6 +23,7 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Support/CachePruning.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -208,6 +209,8 @@ namespace options {
   static std::string stats_file;
   // Asserts that LTO link has whole program visibility
   static bool whole_program_visibility = false;
+  // List of new PM pass plugins
+  static std::vector<std::string> pass_plugins;
 
   // Optimization remarks filename, accepted passes and hotness options
   static std::string RemarksFilename;
@@ -301,6 +304,13 @@ namespace options {
       RemarksFormat = std::string(opt);
     } else if (opt.consume_front("stats-file=")) {
       stats_file = std::string(opt);
+    } else if (opt.startswith("load=")) {
+      std::string Error, Path(opt.substr(strlen("load=")));
+
+      if (sys::DynamicLibrary::LoadLibraryPermanently(Path.c_str(), &Error))
+        message(LDPL_ERROR, "Unable to load plugin: %s", Error.c_str());
+    } else if (opt.startswith("load-pass-plugin=")) {
+      pass_plugins.emplace_back(opt.substr(strlen("load-pass-plugin=")));
     } else {
       // Save this option to pass to the code generator.
       // ParseCommandLineOptions() expects argv[0] to be program name. Lazily
@@ -937,6 +947,8 @@ static std::unique_ptr<LTO> createLTO(IndexWriteCallback OnIndexWrite,
   Conf.UseNewPM = options::new_pass_manager;
   // Debug new pass manager if requested
   Conf.DebugPassManager = options::debug_pass_manager;
+  // Pass plugins to load
+  Conf.PassPlugins = std::move(options::pass_plugins);
 
   Conf.HasWholeProgramVisibility = options::whole_program_visibility;
 

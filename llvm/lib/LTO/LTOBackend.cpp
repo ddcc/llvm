@@ -202,6 +202,17 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   PassBuilder PB(TM, Conf.PTO, PGOOpt, &PIC);
   AAManager AA;
 
+  // Load pass plugins if available
+  for (auto &P : Conf.PassPlugins) {
+    auto PassPlugin = PassPlugin::Load(P);
+    if (PassPlugin) {
+      PassPlugin->registerPassBuilderCallbacks(PB);
+    } else {
+      report_fatal_error("Unable to load pass plugin '" + P + "': " +
+                         toString(PassPlugin.takeError()));
+    }
+  }
+
   // Parse a custom AA pipeline if asked to.
   if (auto Err = PB.parseAAPipeline(AA, "default"))
     report_fatal_error("Error parsing default AA pipeline");
