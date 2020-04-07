@@ -23,6 +23,7 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Support/CachePruning.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -207,6 +208,12 @@ namespace options {
   static std::string stats_file;
   // Asserts that LTO link has whole program visibility
   static bool whole_program_visibility = false;
+  // List of new PM pass plugins
+  static std::vector<std::string> pass_plugins;
+  // Path to ourselves, and whether we have been reloaded for pass plugin symbol
+  // resolution
+  static std::string self_path;
+  static bool self_reloaded = false;
 
   // Optimization remarks filename, accepted passes and hotness options
   static std::string RemarksFilename;
@@ -217,6 +224,24 @@ namespace options {
   // Context sensitive PGO options.
   static std::string cs_profile_path;
   static bool cs_pgo_gen = false;
+
+  static bool reload_self(const std::string &path) {
+    std::string Error;
+
+    // This plugin is loaded by gold under RTLD_LOCAL, which means that our
+    // LLVM symbols are not available to subsequent pass plugins. Since this
+    // will break statically-built pass plugins, we reload with RTLD_GLOBAL.
+    if (path.size()) {
+      if (!sys::DynamicLibrary::LoadLibraryPermanently(path.c_str(), &Error))
+        return true;
+
+      message(LDPL_ERROR, "Unable to reload LLVM gold plugin: %s",
+              Error.c_str());
+    } else
+      message(LDPL_ERROR, "Unable to retrieve path to LLVM gold plugin!");
+
+    return false;
+  }
 
   static void process_plugin_option(const char *opt_)
   {
@@ -300,6 +325,22 @@ namespace options {
       RemarksFormat = std::string(opt);
     } else if (opt.consume_front("stats-file=")) {
       stats_file = std::string(opt);
+    } else if (opt.consume_front("self=")) {
+      // Store our own path, in case we need to be reloaded
+      self_path = std::string(opt);
+    } else if (opt.consume_front("load=")) {
+      std::string Error, Path(opt);
+
+      if (!self_reloaded)
+        self_reloaded = reload_self(self_path);
+
+      if (sys::DynamicLibrary::LoadLibraryPermanently(Path.c_str(), &Error))
+        message(LDPL_ERROR, "Unable to load plugin: %s", Error.c_str());
+    } else if (opt.consume_front("load-pass-plugin=")) {
+      if (!self_reloaded)
+        self_reloaded = reload_self(self_path);
+
+      pass_plugins.push_back(opt.data());
     } else {
       // Save this option to pass to the code generator.
       // ParseCommandLineOptions() expects argv[0] to be program name. Lazily
@@ -935,6 +976,8 @@ static std::unique_ptr<LTO> createLTO(IndexWriteCallback OnIndexWrite,
   Conf.UseNewPM = options::new_pass_manager;
   // Debug new pass manager if requested
   Conf.DebugPassManager = options::debug_pass_manager;
+  // Pass plugins to load
+  Conf.PassPlugins = std::move(options::pass_plugins);
 
   Conf.HasWholeProgramVisibility = options::whole_program_visibility;
 

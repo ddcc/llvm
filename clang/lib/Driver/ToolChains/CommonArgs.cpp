@@ -379,6 +379,9 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
                                 Suffix,
                             Plugin);
     CmdArgs.push_back(Args.MakeArgString(Plugin));
+
+    // Pass in our own path in case we need to reload
+    CmdArgs.push_back(Args.MakeArgString(Twine("-plugin-opt=self=") + Plugin));
   }
 
   // Try to pass driver level flags relevant to LTO code generation down to
