@@ -513,9 +513,17 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
         ProfileUseArg->getNumValues() == 0 ? "" : ProfileUseArg->getValue());
     if (Path.empty() || llvm::sys::fs::is_directory(Path))
       llvm::sys::path::append(Path, "default.profdata");
-    CmdArgs.push_back(Args.MakeArgString(Twine("-plugin-opt=cs-profile-path=") +
-                                         Path));
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-plugin-opt=cs-profile-path=") + Path));
   }
+
+  // Forward arguments for loading plugins (old/new PM)
+  for (const Arg *A : Args.filtered(options::OPT_fplugin_EQ))
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-plugin-opt=load=") + A->getValue()));
+  for (const Arg *A : Args.filtered(options::OPT_fpass_plugin_EQ))
+    CmdArgs.push_back(Args.MakeArgString(
+        Twine("-plugin-opt=load-pass-plugin=") + A->getValue()));
 
   // Need this flag to turn on new pass manager via Gold plugin.
   if (Args.hasFlag(options::OPT_fexperimental_new_pass_manager,
