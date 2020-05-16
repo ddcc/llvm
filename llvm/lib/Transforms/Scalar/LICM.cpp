@@ -499,8 +499,8 @@ bool llvm::sinkRegion(DomTreeNode *N, AAResults *AA, LoopInfo *LI,
       bool FreeInLoop = false;
       if (!I.mayHaveSideEffects() &&
           isNotUsedOrFreeInLoop(I, CurLoop, SafetyInfo, TTI, FreeInLoop) &&
-          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, MSSAU, true, &Flags,
-                             ORE)) {
+          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, MSSAU, SafetyInfo,
+                             true, &Flags, ORE)) {
         if (sink(I, LI, DT, CurLoop, SafetyInfo, MSSAU, ORE)) {
           if (!FreeInLoop) {
             ++II;
@@ -808,8 +808,8 @@ bool llvm::hoistRegion(DomTreeNode *N, AAResults *AA, LoopInfo *LI,
       // and we have accurately duplicated the control flow from the loop header
       // to that block.
       if (CurLoop->hasLoopInvariantOperands(&I) &&
-          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, MSSAU, true, &Flags,
-                             ORE) &&
+          canSinkOrHoistInst(I, AA, DT, CurLoop, CurAST, MSSAU, SafetyInfo,
+                             true, &Flags, ORE) &&
           isSafeToExecuteUnconditionally(
               I, DT, CurLoop, SafetyInfo, ORE,
               CurLoop->getLoopPreheader()->getTerminator())) {
@@ -932,6 +932,25 @@ bool llvm::hoistRegion(DomTreeNode *N, AAResults *AA, LoopInfo *LI,
   return Changed;
 }
 
+static bool
+isUnconditionalInvariantGroupLoad(LoadInst *LI, const DominatorTree *DT,
+                                  const Loop *CurLoop,
+                                  const LoopSafetyInfo *SafetyInfo,
+                                  bool TargetExecutesOncePerLoop) {
+  if (!LI->getMetadata(LLVMContext::MD_invariant_group))
+    return false;
+
+  // For now we only want to hoist invariant.group loads if we can keep
+  // the metadata.  This is because we don't know yet if it's better to hoist it
+  // and lose metadata, or to keep the metadata counting that we will be able
+  // to merge this load with another outside the loop.
+
+  // The metadata is valid in the loop preheader if we are guaranteed to
+  // execute I if we entered the loop.
+  return TargetExecutesOncePerLoop && SafetyInfo &&
+         SafetyInfo->isGuaranteedToExecute(*LI, DT, CurLoop);
+}
+
 // Return true if LI is invariant within scope of the loop. LI is invariant if
 // CurLoop is dominated by an invariant.start representing the same memory
 // location and size as the memory location LI loads from, and also the
@@ -1037,7 +1056,7 @@ bool isOnlyMemoryAccess(const Instruction *I, const Loop *L,
 
 bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
                               Loop *CurLoop, AliasSetTracker *CurAST,
-                              MemorySSAUpdater *MSSAU,
+                              MemorySSAUpdater *MSSAU, LoopSafetyInfo *SI,
                               bool TargetExecutesOncePerLoop,
                               SinkAndHoistLICMFlags *Flags,
                               OptimizationRemarkEmitter *ORE) {
@@ -1063,6 +1082,10 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
 
     if (LI->isAtomic() && !TargetExecutesOncePerLoop)
       return false; // Don't risk duplicating unordered loads
+
+    if (isUnconditionalInvariantGroupLoad(LI, DT, CurLoop, SI,
+                                          TargetExecutesOncePerLoop))
+      return true;
 
     // This checks for an invariant.start dominating the load.
     if (isLoadInvariantInLoop(LI, DT, CurLoop))
@@ -1648,10 +1671,8 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
                                                          << ore::NV("Inst", &I);
   });
 
-  // Metadata can be dependent on conditions we are hoisting above.
-  // Conservatively strip all metadata on the instruction unless we were
-  // guaranteed to execute I if we entered the loop, in which case the metadata
-  // is valid in the loop preheader.
+  // Metadata can be dependent on conditions we are hoisting above.  Except when
+  // we can prove the metadata independent of any such conditions, strip it.
   if (I.hasMetadataOtherThanDebugLoc() &&
       // The check on hasMetadataOtherThanDebugLoc is to prevent us from burning
       // time in isGuaranteedToExecute if we don't actually have anything to
