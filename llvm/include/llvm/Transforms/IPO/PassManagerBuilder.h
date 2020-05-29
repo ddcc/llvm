@@ -121,6 +121,8 @@ public:
     /// run at Link Time, before Full Link Time Optimization.
     EP_FullLinkTimeOptimizationEarly,
 
+    EP_FullLinkTimeOptimizationPreLowerTypeTests,
+
     /// EP_FullLinkTimeOptimizationLast - This extensions point allow adding
     /// passes that
     /// run at Link Time, after Full Link Time Optimization.

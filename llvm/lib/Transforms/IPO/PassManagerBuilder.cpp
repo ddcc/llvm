@@ -1123,6 +1123,10 @@ void PassManagerBuilder::populateLTOPassManager(legacy::PassManagerBase &PM) {
     PM.add(createWholeProgramDevirtPass(ExportSummary, nullptr));
   }
 
+  // Run any passes to handle new type tests introduced by whole program
+  // devirtualization.
+  addExtensionsToPM(EP_FullLinkTimeOptimizationPreLowerTypeTests, PM);
+
   // Create a function that performs CFI checks for cross-DSO calls with targets
   // in the current module.
   PM.add(createCrossDSOCFIPass());
