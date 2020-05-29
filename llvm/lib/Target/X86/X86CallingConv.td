@@ -43,18 +43,15 @@ def RC_X86_32_RegCall : RC_X86_RegCall {
   let GPR_32 = [EAX, ECX, EDX, EDI, ESI];
   let GPR_64 = [RAX]; ///< Not actually used, but AssignToReg can't handle []
                       ///< \todo Fix AssignToReg to enable empty lists
-  let XMM = [XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7];
-  let YMM = [YMM0, YMM1, YMM2, YMM3, YMM4, YMM5, YMM6, YMM7];
-  let ZMM = [ZMM0, ZMM1, ZMM2, ZMM3, ZMM4, ZMM5, ZMM6, ZMM7];
+  let XMM = [XMM0, XMM1, XMM2, XMM3];
+  let YMM = [YMM0, YMM1, YMM2, YMM3];
+  let ZMM = [ZMM0, ZMM1, ZMM2, ZMM3];
 }
 
 class RC_X86_64_RegCall : RC_X86_RegCall {
-  let XMM = [XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7,
-             XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15];
-  let YMM = [YMM0, YMM1, YMM2, YMM3, YMM4, YMM5, YMM6, YMM7,
-             YMM8, YMM9, YMM10, YMM11, YMM12, YMM13, YMM14, YMM15];
-  let ZMM = [ZMM0, ZMM1, ZMM2, ZMM3, ZMM4, ZMM5, ZMM6, ZMM7,
-             ZMM8, ZMM9, ZMM10, ZMM11, ZMM12, ZMM13, ZMM14, ZMM15];
+  let XMM = [XMM0, XMM1, XMM2, XMM3];
+  let YMM = [YMM0, YMM1, YMM2, YMM3];
+  let ZMM = [ZMM0, ZMM1, ZMM2, ZMM3];
 }
 
 def RC_X86_64_RegCall_Win : RC_X86_64_RegCall {
@@ -541,7 +538,7 @@ def CC_X86_64_C : CallingConv<[
   // The first 8 FP/Vector arguments are passed in XMM registers.
   CCIfType<[f32, f64, f128, v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
             CCIfSubtarget<"hasSSE1()",
-            CCAssignToReg<[XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7]>>>,
+            CCAssignToReg<[XMM0, XMM1, XMM2, XMM3]>>>,
 
   // The first 8 256-bit vector arguments are passed in YMM registers, unless
   // this is a vararg function.
@@ -550,13 +547,12 @@ def CC_X86_64_C : CallingConv<[
   // registers.  Actually modeling that would be a lot of work, though.
   CCIfNotVarArg<CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64],
                           CCIfSubtarget<"hasAVX()",
-                          CCAssignToReg<[YMM0, YMM1, YMM2, YMM3,
-                                         YMM4, YMM5, YMM6, YMM7]>>>>,
+                          CCAssignToReg<[YMM0, YMM1, YMM2, YMM3]>>>>,
 
   // The first 8 512-bit vector arguments are passed in ZMM registers.
   CCIfNotVarArg<CCIfType<[v64i8, v32i16, v16i32, v8i64, v16f32, v8f64],
             CCIfSubtarget<"hasAVX512()",
-            CCAssignToReg<[ZMM0, ZMM1, ZMM2, ZMM3, ZMM4, ZMM5, ZMM6, ZMM7]>>>>,
+            CCAssignToReg<[ZMM0, ZMM1, ZMM2, ZMM3]>>>>,
 
   // Integer/FP values get stored in stack slots that are 8 bytes in size and
   // 8-byte aligned if there are no more registers to hold them.
@@ -1099,13 +1095,13 @@ def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RAX, RCX, RDX, RSI, RDI,
 
 // All registers - except r11
 def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
-                                                 (sequence "XMM%u", 0, 15))>;
+                                                 (sequence "XMM%u", 0, 3))>;
 def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
-                                                 (sequence "YMM%u", 0, 15))>;
+                                                 (sequence "YMM%u", 0, 3))>;
 
 def CSR_64_MostRegs : CalleeSavedRegs<(add RBX, RCX, RDX, RSI, RDI, R8, R9, R10,
                                            R11, R12, R13, R14, R15, RBP,
-                                           (sequence "XMM%u", 0, 15))>;
+                                           (sequence "XMM%u", 0, 3))>;
 
 def CSR_32_AllRegs     : CalleeSavedRegs<(add EAX, EBX, ECX, EDX, EBP, ESI,
                                               EDI)>;
@@ -1121,12 +1117,12 @@ def CSR_64_AllRegs     : CalleeSavedRegs<(add CSR_64_MostRegs, RAX)>;
 def CSR_64_AllRegs_NoSSE : CalleeSavedRegs<(add RAX, RBX, RCX, RDX, RSI, RDI, R8, R9,
                                                 R10, R11, R12, R13, R14, R15, RBP)>;
 def CSR_64_AllRegs_AVX : CalleeSavedRegs<(sub (add CSR_64_MostRegs, RAX,
-                                                   (sequence "YMM%u", 0, 15)),
-                                              (sequence "XMM%u", 0, 15))>;
+                                                   (sequence "YMM%u", 0, 3)),
+                                              (sequence "XMM%u", 0, 3))>;
 def CSR_64_AllRegs_AVX512 : CalleeSavedRegs<(sub (add CSR_64_MostRegs, RAX,
-                                                      (sequence "ZMM%u", 0, 31),
+                                                      (sequence "ZMM%u", 0, 3),
                                                       (sequence "K%u", 0, 7)),
-                                                 (sequence "XMM%u", 0, 15))>;
+                                                 (sequence "XMM%u", 0, 3))>;
 
 // Standard C + YMM6-15
 def CSR_Win64_Intel_OCL_BI_AVX : CalleeSavedRegs<(add RBX, RBP, RDI, RSI, R12,

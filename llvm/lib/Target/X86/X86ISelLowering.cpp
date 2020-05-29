@@ -3334,7 +3334,6 @@ static ArrayRef<MCPhysReg> get64BitArgumentXMMs(MachineFunction &MF,
 
   static const MCPhysReg XMMArgRegs64Bit[] = {
     X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3,
-    X86::XMM4, X86::XMM5, X86::XMM6, X86::XMM7
   };
   return makeArrayRef(std::begin(XMMArgRegs64Bit), std::end(XMMArgRegs64Bit));
 }
@@ -4064,7 +4063,6 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     // Count the number of XMM registers allocated.
     static const MCPhysReg XMMArgRegs[] = {
       X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3,
-      X86::XMM4, X86::XMM5, X86::XMM6, X86::XMM7
     };
     unsigned NumXMMRegs = CCInfo.getFirstUnallocated(XMMArgRegs);
     assert((Subtarget.hasSSE1() || !NumXMMRegs)
@@ -30365,7 +30363,7 @@ X86TargetLowering::EmitVAARG64WithCustomInserter(MachineInstr &MI,
   // alignment(va_list) = 8
 
   unsigned TotalNumIntRegs = 6;
-  unsigned TotalNumXMMRegs = 8;
+  unsigned TotalNumXMMRegs = 4;
   bool UseGPOffset = (ArgMode == 1);
   bool UseFPOffset = (ArgMode == 2);
   unsigned MaxOffset = TotalNumIntRegs * 8 +

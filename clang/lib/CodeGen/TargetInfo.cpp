@@ -3613,7 +3613,7 @@ void X86_64ABIInfo::computeInfo(CGFunctionInfo &FI) const {
 
   // Keep track of the number of assigned registers.
   unsigned FreeIntRegs = IsRegCall ? 11 : 6;
-  unsigned FreeSSERegs = IsRegCall ? 16 : 8;
+  unsigned FreeSSERegs = 4;
   unsigned NeededInt, NeededSSE;
 
   if (!::classifyReturnType(getCXXABI(), FI, *this)) {
@@ -3758,7 +3758,7 @@ Address X86_64ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
     fp_offset_p = CGF.Builder.CreateStructGEP(VAListAddr, 1, "fp_offset_p");
     fp_offset = CGF.Builder.CreateLoad(fp_offset_p, "fp_offset");
     llvm::Value *FitsInFP =
-      llvm::ConstantInt::get(CGF.Int32Ty, 176 - neededSSE * 16);
+      llvm::ConstantInt::get(CGF.Int32Ty, 112 - neededSSE * 16);
     FitsInFP = CGF.Builder.CreateICmpULE(fp_offset, FitsInFP, "fits_in_fp");
     InRegs = InRegs ? CGF.Builder.CreateAnd(InRegs, FitsInFP) : FitsInFP;
   }

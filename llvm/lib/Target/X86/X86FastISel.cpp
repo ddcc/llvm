@@ -3123,7 +3123,6 @@ bool X86FastISel::fastLowerArguments() {
   };
   static const MCPhysReg XMMArgRegs[] = {
     X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3,
-    X86::XMM4, X86::XMM5, X86::XMM6, X86::XMM7
   };
 
   unsigned GPRIdx = 0;
@@ -3460,7 +3459,6 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
     // Count the number of XMM registers allocated.
     static const MCPhysReg XMMArgRegs[] = {
       X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3,
-      X86::XMM4, X86::XMM5, X86::XMM6, X86::XMM7
     };
     unsigned NumXMMRegs = CCInfo.getFirstUnallocated(XMMArgRegs);
     assert((Subtarget->hasSSE1() || !NumXMMRegs)

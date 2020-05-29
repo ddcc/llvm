@@ -163,8 +163,7 @@ struct OutgoingValueHandler : public CallLowering::ValueHandler {
     StackSize = State.getNextStackOffset();
 
     static const MCPhysReg XMMArgRegs[] = {X86::XMM0, X86::XMM1, X86::XMM2,
-                                           X86::XMM3, X86::XMM4, X86::XMM5,
-                                           X86::XMM6, X86::XMM7};
+                                           X86::XMM3};
     if (!Info.IsFixed)
       NumXMMRegs = State.getFirstUnallocated(XMMArgRegs);
 
