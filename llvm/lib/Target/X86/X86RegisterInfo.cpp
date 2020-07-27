@@ -29,6 +29,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -600,6 +601,14 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       for (MCRegAliasIterator AI(X86::XMM0 + n, this, true); AI.isValid(); ++AI)
         Reserved.set(*AI);
     }
+  }
+
+  if (sys::Process::GetEnv("LLVM_RESERVE_X86_REG")) {
+    outs() << "Reserving register %r12!\n";
+    Reserved.set(X86::R12);
+    Reserved.set(X86::R12D);
+    Reserved.set(X86::R12W);
+    Reserved.set(X86::R12B);
   }
 
   assert(checkAllSuperRegsMarked(Reserved,
