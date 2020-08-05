@@ -190,7 +190,8 @@ __attribute__((unused)) static bool GetLibcVersion(int *major, int *minor,
 }
 
 #if !SANITIZER_FREEBSD && !SANITIZER_ANDROID && !SANITIZER_GO &&               \
-    !SANITIZER_NETBSD && !SANITIZER_OPENBSD && !SANITIZER_SOLARIS
+    !SANITIZER_NETBSD && !SANITIZER_OPENBSD && !SANITIZER_SOLARIS &&           \
+    (!defined(__MUSL__) || !__MUSL__)
 static uptr g_tls_size;
 
 #ifdef __i386__
@@ -427,13 +428,13 @@ int GetSizeFromHdr(struct dl_phdr_info *info, size_t size, void *data) {
 
 #if !SANITIZER_GO
 static void GetTls(uptr *addr, uptr *size) {
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_LINUX && !SANITIZER_ANDROID && (!defined(__MUSL__) || !__MUSL__)
 # if defined(__x86_64__) || defined(__i386__) || defined(__s390__)
   *addr = ThreadSelf();
   *size = GetTlsSize();
   *addr -= *size;
   *addr += ThreadDescriptorSize();
-# elif defined(__mips__) || defined(__aarch64__) || defined(__powerpc64__) \
+# elif (defined(__mips__) || defined(__aarch64__) || defined(__powerpc64__) \
     || defined(__arm__)
   *addr = ThreadSelf();
   *size = GetTlsSize();
@@ -441,6 +442,9 @@ static void GetTls(uptr *addr, uptr *size) {
   *addr = 0;
   *size = 0;
 # endif
+#elif SANITIZER_LINUX && !SANITIZER_ANDROID && defined(__MUSL__) && __MUSL__
+  *addr = 0;
+  *size = 0;
 #elif SANITIZER_FREEBSD
   void** segbase = ThreadSelfSegbase();
   *addr = 0;
@@ -487,7 +491,7 @@ static void GetTls(uptr *addr, uptr *size) {
 #if !SANITIZER_GO
 uptr GetTlsSize() {
 #if SANITIZER_FREEBSD || SANITIZER_ANDROID || SANITIZER_NETBSD ||              \
-    SANITIZER_OPENBSD || SANITIZER_SOLARIS
+    SANITIZER_OPENBSD || SANITIZER_SOLARIS || (defined(__MUSL__) && __MUSL__)
   uptr addr, size;
   GetTls(&addr, &size);
   return size;

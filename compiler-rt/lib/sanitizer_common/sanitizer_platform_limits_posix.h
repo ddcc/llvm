@@ -197,7 +197,11 @@ extern unsigned struct_rlimit64_sz;
 extern unsigned struct_statvfs64_sz;
 
 struct __sanitizer_ipc_perm {
+#if defined(__MUSL__) && __MUSL__
+  int __ipc_perm_key;
+#else
   int __key;
+#endif
   int uid;
   int gid;
   int cuid;
@@ -447,13 +451,39 @@ struct __sanitizer_msghdr {
   void *msg_name;
   unsigned msg_namelen;
   struct __sanitizer_iovec *msg_iov;
+#if defined(__GLIBC__)
   uptr msg_iovlen;
+#else
+#if defined(__DEFINED_socklen_t)
+  socklen_t msg_iovlen, __pad1;
+#else
+  unsigned msg_iovlen, __pad1;
+#endif
+#endif
   void *msg_control;
+#if defined(__GLIBC__)
   uptr msg_controllen;
+#else
+#if defined(__DEFINED_socklen_t)
+  socklen_t msg_controllen, __pad2;
+#else
+  unsigned msg_controllen, __pad2;
+#endif
+#endif
   int msg_flags;
 };
 struct __sanitizer_cmsghdr {
+#if defined(__GLIBC__)
   uptr cmsg_len;
+#else
+#if defined(__DEFINED_socklen_t)
+  socklen_t cmsg_len;
+  int __pad1;
+#else
+  unsigned cmsg_len;
+  int __pad1;
+#endif
+#endif
   int cmsg_level;
   int cmsg_type;
 };

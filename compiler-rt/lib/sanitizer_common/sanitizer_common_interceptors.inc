@@ -2330,6 +2330,7 @@ INTERCEPTOR(int, glob, const char *pattern, int flags,
   COMMON_INTERCEPTOR_READ_STRING(ctx, pattern, 0);
   __sanitizer_glob_t glob_copy;
   internal_memcpy(&glob_copy, &kGlobCopy, sizeof(glob_copy));
+#if !defined(__MUSL__) || !__MUSL__
   if (flags & glob_altdirfunc) {
     Swap(pglob->gl_closedir, glob_copy.gl_closedir);
     Swap(pglob->gl_readdir, glob_copy.gl_readdir);
@@ -2338,7 +2339,9 @@ INTERCEPTOR(int, glob, const char *pattern, int flags,
     Swap(pglob->gl_stat, glob_copy.gl_stat);
     pglob_copy = &glob_copy;
   }
+#endif
   int res = REAL(glob)(pattern, flags, errfunc, pglob);
+#if !defined(__MUSL__) || !__MUSL__
   if (flags & glob_altdirfunc) {
     Swap(pglob->gl_closedir, glob_copy.gl_closedir);
     Swap(pglob->gl_readdir, glob_copy.gl_readdir);
@@ -2346,6 +2349,7 @@ INTERCEPTOR(int, glob, const char *pattern, int flags,
     Swap(pglob->gl_lstat, glob_copy.gl_lstat);
     Swap(pglob->gl_stat, glob_copy.gl_stat);
   }
+#endif
   pglob_copy = 0;
   if ((!res || res == glob_nomatch) && pglob) unpoison_glob_t(ctx, pglob);
   return res;
@@ -2366,6 +2370,7 @@ INTERCEPTOR(int, glob64, const char *pattern, int flags,
   COMMON_INTERCEPTOR_READ_STRING(ctx, pattern, 0);
   __sanitizer_glob_t glob_copy;
   internal_memcpy(&glob_copy, &kGlobCopy, sizeof(glob_copy));
+#if !defined(__MUSL__) || !__MUSL__
   if (flags & glob_altdirfunc) {
     Swap(pglob->gl_closedir, glob_copy.gl_closedir);
     Swap(pglob->gl_readdir, glob_copy.gl_readdir);
@@ -2374,7 +2379,9 @@ INTERCEPTOR(int, glob64, const char *pattern, int flags,
     Swap(pglob->gl_stat, glob_copy.gl_stat);
     pglob_copy = &glob_copy;
   }
+#endif
   int res = REAL(glob64)(pattern, flags, errfunc, pglob);
+#if !defined(__MUSL__) || !__MUSL__
   if (flags & glob_altdirfunc) {
     Swap(pglob->gl_closedir, glob_copy.gl_closedir);
     Swap(pglob->gl_readdir, glob_copy.gl_readdir);
@@ -2382,6 +2389,7 @@ INTERCEPTOR(int, glob64, const char *pattern, int flags,
     Swap(pglob->gl_lstat, glob_copy.gl_lstat);
     Swap(pglob->gl_stat, glob_copy.gl_stat);
   }
+#endif
   pglob_copy = 0;
   if ((!res || res == glob_nomatch) && pglob) unpoison_glob_t(ctx, pglob);
   return res;

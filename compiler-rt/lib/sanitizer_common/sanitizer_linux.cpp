@@ -27,7 +27,9 @@
 #include "sanitizer_procmaps.h"
 
 #if SANITIZER_LINUX && !SANITIZER_GO
+#if !defined(__MUSL__) || !__MUSL__
 #include <asm/param.h>
+#endif
 #endif
 
 // For mips64, syscall(__NR_stat) fills the buffer in the 'struct kernel_stat'

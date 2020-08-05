@@ -55,6 +55,9 @@ extern Elf_Dyn _DYNAMIC;
 #else
 #include <sys/ucontext.h>
 #include <link.h>
+# if defined(__MUSL__) && __MUSL__
+extern "C" void* _DYNAMIC;
+# endif
 #endif
 
 // x86-64 FreeBSD 9.2 and older define 'ucontext_t' incorrectly in

@@ -64,7 +64,7 @@ bool InterceptFunction(const char *name, uptr *ptr_to_real, uptr func,
 }
 
 // Android and Solaris do not have dlvsym
-#if !SANITIZER_ANDROID && !SANITIZER_SOLARIS && !SANITIZER_OPENBSD
+#if (!SANITIZER_ANDROID && !SANITIZER_SOLARIS && !SANITIZER_OPENBSD) && (!SANITIZER_LINUX || (SANITIZER_LINUX && (!defined(__MUSL__) || !__MUSL__)))
 static void *GetFuncAddr(const char *name, const char *ver) {
   return dlvsym(RTLD_NEXT, name, ver);
 }

@@ -26,7 +26,9 @@
 #include <signal.h>
 #include <unistd.h>
 #include <unwind.h>
+#if !defined(__MUSL__) || !__MUSL__
 #include <execinfo.h>
+#endif
 #include <sys/time.h>
 #include <sys/resource.h>
 
