@@ -30,12 +30,6 @@ const char *missing_comma_u8[] = {
     u8"shared_future"
 };
 
-const char *missing_two_commas[] = {"basic_filebuf",
-                       "basic_ios" // expected-note{{place parentheses around the string literal to silence warning}}
-                       "future"    // expected-warning{{suspicious concatenation of string literals in an array initialization; did you mean to separate the elements with a comma?}}
-                       "optional",
-                       "packaged_task"};
-
 const char *missing_comma_same_line[] = {"basic_filebuf", "basic_ios",
                        "future" "optional",         // expected-note{{place parentheses around the string literal to silence warning}}
                        "packaged_task", "promise"}; // expected-warning@-1{{suspicious concatenation of string literals in an array initialization; did you mean to separate the elements with a comma?}}
@@ -54,12 +48,20 @@ char missing_comma_inner[][5] = {
     "d" // expected-warning{{suspicious concatenation of string literals in an array initialization; did you mean to separate the elements with a comma?}}
 };
 
+const char *warn[] = { "cpll", "gpll", "hdmiphy" "usb480m" }; // expected-note{{place parentheses around the string literal to silence warning}}
+// expected-warning@-1{{suspicious concatenation of string literals in an array initialization; did you mean to separate the elements with a comma?}}
+
+const char *missing_two_commas_ignore[] = {"basic_filebuf",
+                       "basic_ios" 
+                       "future"  
+                       "optional",
+                       "packaged_task"};
 
 #define ONE(x) x
 #define TWO "foo"
-const char *macro_test[] = { ONE("foo") "bar", 
-                             TWO "bar", 
-                             "foo" "bar" TWO // expected-note{{place parentheses around the string literal to silence warning}}
+const char *macro_test[] = { ONE("foo"),
+                             TWO,
+                             "foo" TWO // expected-note{{place parentheses around the string literal to silence warning}}
                            };          // expected-warning@-1{{suspicious concatenation of string literals in an array initialization; did you mean to separate the elements with a comma?}}
 
 // Do not warn for macros.
@@ -106,6 +108,24 @@ const char *not_warn2[] = {
     "// Aaa\\\n"   " Bbb\\ \n"   " Ccc?" "?/\n",
     "// Aaa\\\r\n" " Bbb\\ \r\n" " Ccc?" "?/\r\n",
     "// Aaa\\\r"   " Bbb\\ \r"   " Ccc?" "?/\r"
+};
+
+const char *not_warn3[] = {
+  "// \\tparam aaa Bbb\n",
+  "// \\tparam\n"
+  "//     aaa Bbb\n",
+  "// \\tparam \n"
+  "//     aaa Bbb\n",
+  "// \\tparam aaa\n"
+  "// Bbb\n"
+};
+
+const char *not_warn4[] =  {"title",
+               "aaaa "
+               "bbbb "
+               "cccc "
+               "ddd.",
+               "url"
 };
 
 // Do not warn when all the elements in the initializer are concatenated together.
