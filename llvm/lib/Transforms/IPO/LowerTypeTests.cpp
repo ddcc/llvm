@@ -55,6 +55,7 @@
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/MC/MCWasmObjectWriter.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
@@ -400,7 +401,7 @@ class LowerTypeTestsModule {
   IntegerType *IntPtrTy = M.getDataLayout().getIntPtrType(M.getContext(), 0);
 
   // Indirect function call index assignment counter for WebAssembly
-  uint64_t IndirectIndex = 1;
+  uint64_t IndirectIndex = MCWasmObjectTargetWriter::InitialTableOffset;
 
   // Mapping from type identifiers to the call sites that test them, as well as
   // whether the type identifier needs to be exported to ThinLTO backends as
@@ -767,15 +768,19 @@ Value *LowerTypeTestsModule::lowerTypeTestCall(Metadata *TypeId, CallInst *CI,
   // result, causing the comparison to fail if they are nonzero. The rotate
   // also conveniently gives us a bit offset to use during the load from
   // the bitset.
-  Value *OffsetSHR =
-      B.CreateLShr(PtrOffset, ConstantExpr::getZExt(TIL.AlignLog2, IntPtrTy));
-  Value *OffsetSHL = B.CreateShl(
-      PtrOffset, ConstantExpr::getZExt(
-                     ConstantExpr::getSub(
-                         ConstantInt::get(Int8Ty, DL.getPointerSizeInBits(0)),
-                         TIL.AlignLog2),
-                     IntPtrTy));
-  Value *BitOffset = B.CreateOr(OffsetSHR, OffsetSHL);
+  Value *BitOffset;
+  if (!TIL.AlignLog2->isZeroValue()) {
+    Value *OffsetSHR =
+        B.CreateLShr(PtrOffset, ConstantExpr::getZExt(TIL.AlignLog2, IntPtrTy));
+    Value *OffsetSHL = B.CreateShl(
+        PtrOffset, ConstantExpr::getZExt(
+                       ConstantExpr::getSub(
+                           ConstantInt::get(Int8Ty, DL.getPointerSizeInBits(0)),
+                           TIL.AlignLog2),
+                       IntPtrTy));
+    BitOffset = B.CreateOr(OffsetSHR, OffsetSHL);
+  } else
+    BitOffset = PtrOffset;
 
   Value *OffsetInRange = B.CreateICmpULE(BitOffset, TIL.SizeM1);
 
@@ -914,22 +919,33 @@ uint8_t *LowerTypeTestsModule::exportTypeId(StringRef TypeId,
       ExportSummary->getOrInsertTypeIdSummary(TypeId).TTRes;
   TTRes.TheKind = TIL.TheKind;
 
-  auto ExportGlobal = [&](StringRef Name, Constant *C) {
-    GlobalAlias *GA =
-        GlobalAlias::create(Int8Ty, 0, GlobalValue::ExternalLinkage,
-                            "__typeid_" + TypeId + "_" + Name, C, &M);
-    GA->setVisibility(GlobalValue::HiddenVisibility);
+  auto ExportGlobal = [&](StringRef Name, Constant *C, bool useAlias) {
+    GlobalValue *GV;
+    const auto GVName = ("__typeid_" + TypeId + "_" + Name).str();
+    if (useAlias)
+      GV = GlobalAlias::create(Int8Ty, 0, GlobalValue::ExternalLinkage, GVName,
+                               C, &M);
+    else
+      GV = new GlobalVariable(M, C->getType(), true,
+                              GlobalValue::ExternalLinkage, C, GVName);
+    GV->setVisibility(GlobalValue::HiddenVisibility);
   };
 
   auto ExportConstant = [&](StringRef Name, uint64_t &Storage, Constant *C) {
     if (shouldExportConstantsAsAbsoluteSymbols())
-      ExportGlobal(Name, ConstantExpr::getIntToPtr(C, Int8PtrTy));
+      ExportGlobal(Name, ConstantExpr::getIntToPtr(C, Int8PtrTy), true);
     else
       Storage = cast<ConstantInt>(C)->getZExtValue();
   };
 
-  if (TIL.TheKind != TypeTestResolution::Unsat)
-    ExportGlobal("global_addr", TIL.OffsetedGlobal);
+  if (TIL.TheKind != TypeTestResolution::Unsat) {
+    auto *CE = dyn_cast<ConstantExpr>(TIL.OffsetedGlobal);
+    if (CE && CE->getOpcode() == Instruction::IntToPtr) {
+      assert(!shouldExportConstantsAsAbsoluteSymbols());
+      ExportGlobal("global_addr", CE->getOperand(0), false);
+    } else
+      ExportGlobal("global_addr", TIL.OffsetedGlobal, true);
+  }
 
   if (TIL.TheKind == TypeTestResolution::ByteArray ||
       TIL.TheKind == TypeTestResolution::Inline ||
@@ -945,9 +961,9 @@ uint8_t *LowerTypeTestsModule::exportTypeId(StringRef TypeId,
   }
 
   if (TIL.TheKind == TypeTestResolution::ByteArray) {
-    ExportGlobal("byte_array", TIL.TheByteArray);
+    ExportGlobal("byte_array", TIL.TheByteArray, true);
     if (shouldExportConstantsAsAbsoluteSymbols())
-      ExportGlobal("bit_mask", TIL.BitMask);
+      ExportGlobal("bit_mask", TIL.BitMask, true);
     else
       return &TTRes.BitMask;
   }
@@ -1120,7 +1136,9 @@ void LowerTypeTestsModule::importFunction(
 void LowerTypeTestsModule::lowerTypeTestCalls(
     ArrayRef<Metadata *> TypeIds, Constant *CombinedGlobalAddr,
     const DenseMap<GlobalTypeMember *, uint64_t> &GlobalLayout) {
-  CombinedGlobalAddr = ConstantExpr::getBitCast(CombinedGlobalAddr, Int8PtrTy);
+  if (CombinedGlobalAddr)
+    CombinedGlobalAddr =
+        ConstantExpr::getBitCast(CombinedGlobalAddr, Int8PtrTy);
 
   // For each type identifier in this disjoint set...
   for (Metadata *TypeId : TypeIds) {
@@ -1136,8 +1154,13 @@ void LowerTypeTestsModule::lowerTypeTestCalls(
 
     ByteArrayInfo *BAI = nullptr;
     TypeIdLowering TIL;
-    TIL.OffsetedGlobal = ConstantExpr::getGetElementPtr(
-        Int8Ty, CombinedGlobalAddr, ConstantInt::get(IntPtrTy, BSI.ByteOffset)),
+    TIL.OffsetedGlobal =
+        CombinedGlobalAddr
+            ? ConstantExpr::getGetElementPtr(
+                  Int8Ty, CombinedGlobalAddr,
+                  ConstantInt::get(IntPtrTy, BSI.ByteOffset))
+            : ConstantExpr::getIntToPtr(
+                  ConstantInt::get(IntPtrTy, BSI.ByteOffset), Int8PtrTy);
     TIL.AlignLog2 = ConstantInt::get(Int8Ty, BSI.AlignLog2);
     TIL.SizeM1 = ConstantInt::get(IntPtrTy, BSI.BitSize - 1);
     if (BSI.isAllOnes()) {
@@ -1579,27 +1602,48 @@ void LowerTypeTestsModule::buildBitSetsFromFunctionsWASM(
   // Build consecutive monotonic integer ranges for each call target set
   DenseMap<GlobalTypeMember *, uint64_t> GlobalLayout;
 
+  // Use absolute_symbol metadata to store the assigned table index since it
+  // cannot be dropped, unlike normal metadata
+  auto SetAbsValue = [&](Function *F, uint64_t V) {
+    auto *MinC = ConstantAsMetadata::get(ConstantInt::get(IntPtrTy, V));
+    auto *MaxC = ConstantAsMetadata::get(ConstantInt::get(IntPtrTy, V + 1));
+    F->setMetadata(LLVMContext::MD_absolute_symbol,
+                   MDNode::get(M.getContext(), {MinC, MaxC}));
+  };
+
+  // Perform two passes; first one for imports only
   for (GlobalTypeMember *GTM : Functions) {
     Function *F = cast<Function>(GTM->getGlobal());
 
-    // Skip functions that are not address taken, to avoid bloating the table
-    if (!F->hasAddressTaken())
+    // Skip non-address-taken functions, or functions that are not imports
+    if (!F->hasAddressTaken() || !F->isDeclaration())
       continue;
 
     // Store metadata with the index for each function
-    MDNode *MD = MDNode::get(F->getContext(),
-                             ArrayRef<Metadata *>(ConstantAsMetadata::get(
-                                 ConstantInt::get(Int64Ty, IndirectIndex))));
-    F->setMetadata("wasm.index", MD);
+    SetAbsValue(F, IndirectIndex);
 
     // Assign the counter value
     GlobalLayout[GTM] = IndirectIndex++;
   }
 
-  // The indirect function table index space starts at zero, so pass a NULL
-  // pointer as the subtracted "jump table" offset.
-  lowerTypeTestCalls(TypeIds, ConstantPointerNull::get(Int32PtrTy),
-                     GlobalLayout);
+  // Perform two passes; second one for definitions only
+  for (GlobalTypeMember *GTM : Functions) {
+    Function *F = cast<Function>(GTM->getGlobal());
+
+    // Skip non-address-taken functions, or functions that are imports
+    if (!F->hasAddressTaken() || F->isDeclaration())
+      continue;
+
+    // Store metadata with the index for each function
+    SetAbsValue(F, IndirectIndex);
+
+    // Assign the counter value
+    GlobalLayout[GTM] = IndirectIndex++;
+  }
+
+  // Don't pass CombinedGlobal because no jump table is used and absolute
+  // symbols are not supported
+  lowerTypeTestCalls(TypeIds, nullptr, GlobalLayout);
 }
 
 void LowerTypeTestsModule::buildBitSetsFromDisjointSet(

@@ -125,7 +125,3 @@ void WebAssemblyTargetWasmStreamer::emitLocal(ArrayRef<wasm::ValType> Types) {
 void WebAssemblyTargetWasmStreamer::emitEndFunc() {
   llvm_unreachable(".end_func is not needed for direct wasm output");
 }
-
-void WebAssemblyTargetWasmStreamer::emitIndIdx(const MCExpr *Value) {
-  llvm_unreachable(".indidx encoding not yet implemented");
-}

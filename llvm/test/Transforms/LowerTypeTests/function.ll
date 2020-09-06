@@ -25,13 +25,13 @@ target datalayout = "e-p:64:64"
 ; THUMB: @g = internal alias void (), bitcast ([4 x i8]* getelementptr inbounds ([2 x [4 x i8]], [2 x [4 x i8]]* bitcast (void ()* @[[JT]] to [2 x [4 x i8]]*), i64 0, i64 1) to void ()*)
 
 ; NATIVE: define hidden void @f.cfi()
-; WASM32: define void @f() !type !{{[0-9]+}} !wasm.index ![[I0:[0-9]+]]
+; WASM32: define void @f() !type !{{[0-9]+}} !absolute_symbol ![[I0:[0-9]+]]
 define void @f() !type !0 {
   ret void
 }
 
 ; NATIVE: define internal void @g.cfi()
-; WASM32: define internal void @g() !type !{{[0-9]+}} !wasm.index ![[I1:[0-9]+]]
+; WASM32: define internal void @g() !type !{{[0-9]+}} !absolute_symbol ![[I1:[0-9]+]]
 define internal void @g() !type !0 {
   ret void
 }
@@ -42,7 +42,7 @@ declare i1 @llvm.type.test(i8* %ptr, metadata %bitset) nounwind readnone
 
 define i1 @foo(i8* %p) {
   ; NATIVE: sub i64 {{.*}}, ptrtoint (void ()* @[[JT]] to i64)
-  ; WASM32: sub i64 {{.*}}, ptrtoint (i8* getelementptr (i8, i8* null, i64 1) to i64)
+  ; WASM32: sub i64 {{.*}}, 1
   ; WASM32: icmp ule i64 {{.*}}, 1
   %x = call i1 @llvm.type.test(i8* %p, metadata !"typeid1")
   ret i1 %x
@@ -75,5 +75,5 @@ define i1 @foo(i8* %p) {
 ; ARM: attributes #[[ATTR]] = { naked nounwind
 ; THUMB: attributes #[[ATTR]] = { naked nounwind "target-cpu"="cortex-a8" "target-features"="+thumb-mode" }
 
-; WASM32: ![[I0]] = !{i64 1}
-; WASM32: ![[I1]] = !{i64 2}
+; WASM32: ![[I0]] = !{i64 1, i64 2}
+; WASM32: ![[I1]] = !{i64 2, i64 3}

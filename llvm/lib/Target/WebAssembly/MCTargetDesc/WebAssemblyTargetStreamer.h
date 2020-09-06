@@ -81,7 +81,7 @@ public:
   void emitLocal(ArrayRef<wasm::ValType> Types) override;
   void emitEndFunc() override;
   void emitFunctionType(const MCSymbolWasm *Sym) override {}
-  void emitIndIdx(const MCExpr *Value) override;
+  void emitIndIdx(const MCExpr *Value) override {}
   void emitGlobalType(const MCSymbolWasm *Sym) override {}
   void emitEventType(const MCSymbolWasm *Sym) override {}
   void emitImportModule(const MCSymbolWasm *Sym,

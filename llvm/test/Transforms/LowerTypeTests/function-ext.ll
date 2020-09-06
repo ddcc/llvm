@@ -6,7 +6,7 @@
 
 ; WASM32: private constant [0 x i8] zeroinitializer
 
-; WASM32: declare !type !{{[0-9]+}} !wasm.index !{{[0-9]+}} void @foo1()
+; WASM32: declare !type !{{[0-9]+}} !absolute_symbol !{{[0-9]+}} void @foo1()
 declare !type !0 void @foo1()
 ; WASM32: declare !type !{{[0-9]+}} void @foo2()
 declare !type !1 void @foo2()
@@ -29,6 +29,7 @@ define i1 @baz(i8* %ptr) {
 ; CHECK-LABEL: @addrtaken
 define void()* @addrtaken() {
   ; X64: ret void ()* @[[JT:.*]]
+  ; WASM32: ret void ()* @foo1
   ret void()* @foo1
 }
 

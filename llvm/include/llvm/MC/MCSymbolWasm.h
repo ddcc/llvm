@@ -26,6 +26,7 @@ class MCSymbolWasm : public MCSymbol {
   wasm::WasmSignature *Signature = nullptr;
   Optional<wasm::WasmGlobalType> GlobalType;
   Optional<wasm::WasmEventType> EventType;
+  Optional<uint64_t> TableIndex;
 
   /// An expression describing how to calculate the size of a symbol. If a
   /// symbol has no size this field will be NULL.
@@ -114,6 +115,13 @@ public:
     return EventType.getValue();
   }
   void setEventType(wasm::WasmEventType ET) { EventType = ET; }
+
+  bool hasTableIndex() const { return isFunction() && TableIndex; }
+  uint64_t getTableIndex() const {
+    assert(TableIndex.hasValue());
+    return TableIndex.getValue();
+  }
+  void setTableIndex(uint64_t idx) { TableIndex = idx; }
 };
 
 } // end namespace llvm

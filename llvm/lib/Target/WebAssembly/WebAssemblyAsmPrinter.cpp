@@ -31,6 +31,7 @@
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
+#include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -117,6 +118,18 @@ void WebAssemblyAsmPrinter::emitEndOfAsmFile(Module &M) {
       // imports. so fix the names and the tests, or rethink how import
       // delcarations work in asm files.
       getTargetStreamer()->emitFunctionType(Sym);
+
+      // Set/emit the assigned function index for CFI.
+      if (F.isAbsoluteSymbolRef()) {
+        assert(F.getAbsoluteSymbolRange()->isSingleElement());
+        auto *V =
+            cast<ConstantAsMetadata>(
+                F.getMetadata(LLVMContext::MD_absolute_symbol)->getOperand(0))
+                ->getValue();
+        Sym->setTableIndex(cast<ConstantInt>(V)->getZExtValue());
+
+        getTargetStreamer()->emitIndIdx(AsmPrinter::lowerConstant(V));
+      }
 
       if (TM.getTargetTriple().isOSBinFormatWasm() &&
           F.hasFnAttribute("wasm-import-module")) {
@@ -307,12 +320,15 @@ void WebAssemblyAsmPrinter::emitFunctionBodyStart() {
   // FIXME: clean up how params and results are emitted (use signatures)
   getTargetStreamer()->emitFunctionType(WasmSym);
 
-  // Emit the function index.
-  if (MDNode *Idx = F.getMetadata("wasm.index")) {
-    assert(Idx->getNumOperands() == 1);
+  // Set/emit the assigned function index for CFI.
+  if (F.isAbsoluteSymbolRef()) {
+    assert(F.getAbsoluteSymbolRange()->isSingleElement());
+    auto *V = cast<ConstantAsMetadata>(
+                  F.getMetadata(LLVMContext::MD_absolute_symbol)->getOperand(0))
+                  ->getValue();
+    WasmSym->setTableIndex(cast<ConstantInt>(V)->getZExtValue());
 
-    getTargetStreamer()->emitIndIdx(AsmPrinter::lowerConstant(
-        cast<ConstantAsMetadata>(Idx->getOperand(0))->getValue()));
+    getTargetStreamer()->emitIndIdx(AsmPrinter::lowerConstant(V));
   }
 
   SmallVector<wasm::ValType, 16> Locals;

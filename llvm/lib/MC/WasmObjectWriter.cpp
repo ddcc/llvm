@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/BinaryFormat/Wasm.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCAsmBackend.h"
@@ -39,10 +39,6 @@ using namespace llvm;
 #define DEBUG_TYPE "mc"
 
 namespace {
-
-// Went we ceate the indirect function table we start at 1, so that there is
-// and emtpy slot at 0 and therefore calling a null function pointer will trap.
-static const uint32_t InitialTableOffset = 1;
 
 // For patching purposes, we need to remember where each section starts, both
 // for patching up the section size field, and for patching up references to
@@ -139,6 +135,22 @@ raw_ostream &operator<<(raw_ostream &OS, const WasmRelocationEntry &Rel) {
   return OS;
 }
 #endif
+
+struct WasmTablePair {
+  uint32_t TableIndex;
+  uint32_t FunctionIndex;
+
+  WasmTablePair(uint32_t TIdx, uint32_t FIdx)
+      : TableIndex(TIdx), FunctionIndex(FIdx) {}
+
+  bool operator<(const WasmTablePair &Other) const {
+    return this->TableIndex < Other.TableIndex;
+  }
+
+  bool operator==(const WasmTablePair &Other) const {
+    return this->TableIndex == Other.TableIndex;
+  }
+};
 
 // Write X as an (unsigned) LEB value at offset Offset in Stream, padded
 // to allow patching.
@@ -309,7 +321,7 @@ private:
                           uint32_t NumElements);
   void writeFunctionSection(ArrayRef<WasmFunction> Functions);
   void writeExportSection(ArrayRef<wasm::WasmExport> Exports);
-  void writeElemSection(ArrayRef<uint32_t> TableElems);
+  void writeElemSection(const SmallSet<WasmTablePair, 4> &TableElems);
   void writeDataCountSection();
   uint32_t writeCodeSection(const MCAssembler &Asm, const MCAsmLayout &Layout,
                             ArrayRef<WasmFunction> Functions);
@@ -510,7 +522,12 @@ void WasmObjectWriter::recordRelocation(MCAssembler &Asm,
   if (FixupSection.isWasmData()) {
     DataRelocations.push_back(Rec);
   } else if (FixupSection.getKind().isText()) {
-    CodeRelocations.push_back(Rec);
+    // Insert symbols with pre-assigned indices at the front, to avoid
+    // subsequent conflict if an index has already been assigned
+    if (Rec.Symbol->hasTableIndex())
+      CodeRelocations.insert(CodeRelocations.begin(), Rec);
+    else
+      CodeRelocations.push_back(Rec);
   } else if (FixupSection.getKind().isMetadata()) {
     CustomSectionsRelocations[&FixupSection].push_back(Rec);
   } else {
@@ -543,7 +560,7 @@ WasmObjectWriter::getProvisionalValue(const WasmRelocationEntry &RelEntry,
         cast<MCSymbolWasm>(Layout.getBaseSymbol(*RelEntry.Symbol));
     assert(Base->isFunction());
     if (RelEntry.Type == wasm::R_WASM_TABLE_INDEX_REL_SLEB)
-      return TableIndices[Base] - InitialTableOffset;
+      return TableIndices[Base] - MCWasmObjectTargetWriter::InitialTableOffset;
     else
       return TableIndices[Base];
   }
@@ -844,7 +861,8 @@ void WasmObjectWriter::writeExportSection(ArrayRef<wasm::WasmExport> Exports) {
   endSection(Section);
 }
 
-void WasmObjectWriter::writeElemSection(ArrayRef<uint32_t> TableElems) {
+void WasmObjectWriter::writeElemSection(
+    const SmallSet<WasmTablePair, 4> &TableElems) {
   if (TableElems.empty())
     return;
 
@@ -856,12 +874,12 @@ void WasmObjectWriter::writeElemSection(ArrayRef<uint32_t> TableElems) {
 
   // init expr for starting offset
   W->OS << char(wasm::WASM_OPCODE_I32_CONST);
-  encodeSLEB128(InitialTableOffset, W->OS);
+  encodeSLEB128(MCWasmObjectTargetWriter::InitialTableOffset, W->OS);
   W->OS << char(wasm::WASM_OPCODE_END);
 
   encodeULEB128(TableElems.size(), W->OS);
-  for (uint32_t Elem : TableElems)
-    encodeULEB128(Elem, W->OS);
+  for (auto &P : TableElems)
+    encodeULEB128(P.FunctionIndex, W->OS);
 
   endSection(Section);
 }
@@ -1156,6 +1174,7 @@ static bool isInSymtab(const MCSymbolWasm &Sym) {
 
   return true;
 }
+
 void WasmObjectWriter::prepareImports(
     SmallVectorImpl<wasm::WasmImport> &Imports, MCAssembler &Asm,
     const MCAsmLayout &Layout) {
@@ -1287,7 +1306,7 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
 
   // Collect information from the available symbols.
   SmallVector<WasmFunction, 4> Functions;
-  SmallVector<uint32_t, 4> TableElems;
+  SmallVector<WasmTablePair, 4> TableElems;
   SmallVector<wasm::WasmImport, 4> Imports;
   SmallVector<wasm::WasmExport, 4> Exports;
   SmallVector<wasm::WasmEventType, 1> Events;
@@ -1627,12 +1646,23 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
       const MCSymbolWasm *Base =
           cast<MCSymbolWasm>(Layout.getBaseSymbol(*Rel.Symbol));
       uint32_t FunctionIndex = WasmIndices.find(Base)->second;
-      uint32_t TableIndex = TableElems.size() + InitialTableOffset;
-      if (TableIndices.try_emplace(Base, TableIndex).second) {
+      uint32_t TableIndex =
+          Rel.Symbol->hasTableIndex()
+              ? Rel.Symbol->getTableIndex()
+              : TableElems.size() +
+                    MCWasmObjectTargetWriter::InitialTableOffset;
+      auto P = TableIndices.try_emplace(Base, TableIndex);
+      if (P.second) {
         LLVM_DEBUG(dbgs() << "  -> adding " << Base->getName()
                           << " to table: " << TableIndex << "\n");
-        TableElems.push_back(FunctionIndex);
+        if (!TableElems.insert(WasmTablePair(TableIndex, FunctionIndex)).second)
+          report_fatal_error(Twine(Base->getName()) + ": table index " +
+                             Twine(TableIndex) + " has already been assigned!");
         registerFunctionType(*Base);
+      } else if (Rel.Symbol->hasTableIndex() && P.first->second != TableIndex) {
+        report_fatal_error(Twine(Rel.Symbol->getName()) +
+                           ": symbol has conflicting table indices " +
+                           Twine(P.first->second) + ", " + Twine(TableIndex));
       }
     };
 

@@ -28,6 +28,10 @@ protected:
 public:
   virtual ~MCWasmObjectTargetWriter();
 
+  // When we create the indirect function table we start at 1, so that there is
+  // an empty slot at 0 and therefore calling a null function pointer will trap.
+  static const uint32_t InitialTableOffset = 1;
+
   Triple::ObjectFormatType getFormat() const override { return Triple::Wasm; }
   static bool classof(const MCObjectTargetWriter *W) {
     return W->getFormat() == Triple::Wasm;
