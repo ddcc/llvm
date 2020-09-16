@@ -79,6 +79,9 @@ void scanRelocations(InputChunk *chunk) {
     case R_WASM_TABLE_INDEX_REL_SLEB:
       if (requiresGOTAccess(sym))
         break;
+      // Control-flow integrity requires that certain functions with
+      // pre-assigned table indices be emitted in corresponding order. See
+      // WasmObjectWriter::writeRelocSection before changing.
       out.elemSec->addEntry(cast<FunctionSymbol>(sym));
       break;
     case R_WASM_GLOBAL_INDEX_LEB:
@@ -118,7 +121,6 @@ void scanRelocations(InputChunk *chunk) {
       if (sym->isUndefined() && !config->relocatable && !sym->isWeak())
         reportUndefined(sym);
     }
-
   }
 }
 

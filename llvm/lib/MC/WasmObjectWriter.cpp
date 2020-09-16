@@ -136,22 +136,6 @@ raw_ostream &operator<<(raw_ostream &OS, const WasmRelocationEntry &Rel) {
 }
 #endif
 
-struct WasmTablePair {
-  uint32_t TableIndex;
-  uint32_t FunctionIndex;
-
-  WasmTablePair(uint32_t TIdx, uint32_t FIdx)
-      : TableIndex(TIdx), FunctionIndex(FIdx) {}
-
-  bool operator<(const WasmTablePair &Other) const {
-    return this->TableIndex < Other.TableIndex;
-  }
-
-  bool operator==(const WasmTablePair &Other) const {
-    return this->TableIndex == Other.TableIndex;
-  }
-};
-
 // Write X as an (unsigned) LEB value at offset Offset in Stream, padded
 // to allow patching.
 template <int W>
@@ -321,7 +305,7 @@ private:
                           uint32_t NumElements);
   void writeFunctionSection(ArrayRef<WasmFunction> Functions);
   void writeExportSection(ArrayRef<wasm::WasmExport> Exports);
-  void writeElemSection(const SmallSet<WasmTablePair, 4> &TableElems);
+  void writeElemSection(ArrayRef<uint32_t> TableElems);
   void writeDataCountSection();
   uint32_t writeCodeSection(const MCAssembler &Asm, const MCAsmLayout &Layout,
                             ArrayRef<WasmFunction> Functions);
@@ -329,7 +313,8 @@ private:
   void writeEventSection(ArrayRef<wasm::WasmEventType> Events);
   void writeGlobalSection(ArrayRef<wasm::WasmGlobal> Globals);
   void writeRelocSection(uint32_t SectionIndex, StringRef Name,
-                         std::vector<WasmRelocationEntry> &Relocations);
+                         std::vector<WasmRelocationEntry> &Relocations,
+                         bool isCode);
   void writeLinkingMetaDataSection(
       ArrayRef<wasm::WasmSymbolInfo> SymbolInfos,
       ArrayRef<std::pair<uint16_t, uint32_t>> InitFuncs,
@@ -522,12 +507,7 @@ void WasmObjectWriter::recordRelocation(MCAssembler &Asm,
   if (FixupSection.isWasmData()) {
     DataRelocations.push_back(Rec);
   } else if (FixupSection.getKind().isText()) {
-    // Insert symbols with pre-assigned indices at the front, to avoid
-    // subsequent conflict if an index has already been assigned
-    if (Rec.Symbol->hasTableIndex())
-      CodeRelocations.insert(CodeRelocations.begin(), Rec);
-    else
-      CodeRelocations.push_back(Rec);
+    CodeRelocations.push_back(Rec);
   } else if (FixupSection.getKind().isMetadata()) {
     CustomSectionsRelocations[&FixupSection].push_back(Rec);
   } else {
@@ -545,7 +525,8 @@ WasmObjectWriter::getProvisionalValue(const WasmRelocationEntry &RelEntry,
   if ((RelEntry.Type == wasm::R_WASM_GLOBAL_INDEX_LEB ||
        RelEntry.Type == wasm::R_WASM_GLOBAL_INDEX_I32) &&
       !RelEntry.Symbol->isGlobal()) {
-    assert(GOTIndices.count(RelEntry.Symbol) > 0 && "symbol not found in GOT index space");
+    assert(GOTIndices.count(RelEntry.Symbol) > 0 &&
+           "symbol not found in GOT index space");
     return GOTIndices[RelEntry.Symbol];
   }
 
@@ -572,7 +553,8 @@ WasmObjectWriter::getProvisionalValue(const WasmRelocationEntry &RelEntry,
   case wasm::R_WASM_GLOBAL_INDEX_I32:
   case wasm::R_WASM_EVENT_INDEX_LEB:
     // Provisional value is function/global/event Wasm index
-    assert(WasmIndices.count(RelEntry.Symbol) > 0 && "symbol not found in wasm index space");
+    assert(WasmIndices.count(RelEntry.Symbol) > 0 &&
+           "symbol not found in wasm index space");
     return WasmIndices[RelEntry.Symbol];
   case wasm::R_WASM_FUNCTION_OFFSET_I32:
   case wasm::R_WASM_SECTION_OFFSET_I32: {
@@ -861,8 +843,7 @@ void WasmObjectWriter::writeExportSection(ArrayRef<wasm::WasmExport> Exports) {
   endSection(Section);
 }
 
-void WasmObjectWriter::writeElemSection(
-    const SmallSet<WasmTablePair, 4> &TableElems) {
+void WasmObjectWriter::writeElemSection(ArrayRef<uint32_t> TableElems) {
   if (TableElems.empty())
     return;
 
@@ -878,8 +859,8 @@ void WasmObjectWriter::writeElemSection(
   W->OS << char(wasm::WASM_OPCODE_END);
 
   encodeULEB128(TableElems.size(), W->OS);
-  for (auto &P : TableElems)
-    encodeULEB128(P.FunctionIndex, W->OS);
+  for (uint32_t Elem : TableElems)
+    encodeULEB128(Elem, W->OS);
 
   endSection(Section);
 }
@@ -957,23 +938,51 @@ uint32_t WasmObjectWriter::writeDataSection(const MCAsmLayout &Layout) {
 
 void WasmObjectWriter::writeRelocSection(
     uint32_t SectionIndex, StringRef Name,
-    std::vector<WasmRelocationEntry> &Relocs) {
+    std::vector<WasmRelocationEntry> &Relocs, bool isCode) {
   // See: https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md
   // for descriptions of the reloc sections.
 
   if (Relocs.empty())
     return;
 
-  // First, ensure the relocations are sorted in offset order.  In general they
+  // First, ensure the relocations are sorted.
+  // Relocations with assigned indices appear first in ascending order, because
+  // the table element section generated here is not final, and will be linked
+  // by lld to generate the final object file. So, order these relocations
+  // such that they will be emitted into the final table element section
+  // correctly by lld.
+  // Otherwise, other relocations appear in offset order.  In general they
   // should already be sorted since `recordRelocation` is called in offset
   // order, but for the code section we combine many MC sections into single
   // wasm section, and this order is determined by the order of Asm.Symbols()
   // not the sections order.
-  llvm::stable_sort(
-      Relocs, [](const WasmRelocationEntry &A, const WasmRelocationEntry &B) {
-        return (A.Offset + A.FixupSection->getSectionOffset()) <
-               (B.Offset + B.FixupSection->getSectionOffset());
-      });
+  llvm::stable_sort(Relocs, [&](const WasmRelocationEntry &A,
+                                const WasmRelocationEntry &B) {
+    if (isCode) {
+      uint32_t IdxA = A.Symbol->hasTableIndex() ? A.Symbol->getTableIndex() : 0,
+               IdxB = B.Symbol->hasTableIndex() ? B.Symbol->getTableIndex() : 0;
+      if (IdxA && IdxB && IdxA != IdxB)
+        return IdxA < IdxB;
+      else if ((!IdxA && IdxB) | (IdxA && !IdxB))
+        return !!IdxA;
+    }
+    return (A.Offset + A.FixupSection->getSectionOffset()) <
+           (B.Offset + B.FixupSection->getSectionOffset());
+  });
+
+  // Check that all symbols with assigned indices have unique values
+  if (isCode) {
+    for (auto I = CodeRelocations.begin(), IE = CodeRelocations.end();
+         I != IE && I + 1 != IE; ++I) {
+      auto *E = I->Symbol, *N = (I + 1)->Symbol;
+      if (!E->hasTableIndex() || !N->hasTableIndex())
+        break;
+      else if (E->getTableIndex() == N->getTableIndex() && E != N)
+        report_fatal_error("table index " + Twine(E->getTableIndex()) +
+                           " assigned to both symbols '" + E->getName() +
+                           "' and '" + N->getName() + "'!");
+    }
+  }
 
   SectionBookkeeping Section;
   startCustomSection(Section, std::string("reloc.") + Name.str());
@@ -998,7 +1007,7 @@ void WasmObjectWriter::writeRelocSection(
 void WasmObjectWriter::writeCustomRelocSections() {
   for (const auto &Sec : CustomSections) {
     auto &Relocations = CustomSectionsRelocations[Sec.Section];
-    writeRelocSection(Sec.OutputIndex, Sec.Name, Relocations);
+    writeRelocSection(Sec.OutputIndex, Sec.Name, Relocations, false);
   }
 }
 
@@ -1185,8 +1194,8 @@ void WasmObjectWriter::prepareImports(
   MemImport.Module = "env";
   MemImport.Field = "__linear_memory";
   MemImport.Kind = wasm::WASM_EXTERNAL_MEMORY;
-  MemImport.Memory.Flags = is64Bit() ? wasm::WASM_LIMITS_FLAG_IS_64
-                                     : wasm::WASM_LIMITS_FLAG_NONE;
+  MemImport.Memory.Flags =
+      is64Bit() ? wasm::WASM_LIMITS_FLAG_IS_64 : wasm::WASM_LIMITS_FLAG_NONE;
   Imports.push_back(MemImport);
 
   // For now, always emit the table section, since indirect calls are not
@@ -1306,7 +1315,7 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
 
   // Collect information from the available symbols.
   SmallVector<WasmFunction, 4> Functions;
-  SmallVector<WasmTablePair, 4> TableElems;
+  SmallVector<uint32_t, 4> TableElems;
   SmallVector<wasm::WasmImport, 4> Imports;
   SmallVector<wasm::WasmExport, 4> Exports;
   SmallVector<wasm::WasmEventType, 1> Events;
@@ -1647,22 +1656,12 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
           cast<MCSymbolWasm>(Layout.getBaseSymbol(*Rel.Symbol));
       uint32_t FunctionIndex = WasmIndices.find(Base)->second;
       uint32_t TableIndex =
-          Rel.Symbol->hasTableIndex()
-              ? Rel.Symbol->getTableIndex()
-              : TableElems.size() +
-                    MCWasmObjectTargetWriter::InitialTableOffset;
-      auto P = TableIndices.try_emplace(Base, TableIndex);
-      if (P.second) {
+          TableElems.size() + MCWasmObjectTargetWriter::InitialTableOffset;
+      if (TableIndices.try_emplace(Base, TableIndex).second) {
         LLVM_DEBUG(dbgs() << "  -> adding " << Base->getName()
                           << " to table: " << TableIndex << "\n");
-        if (!TableElems.insert(WasmTablePair(TableIndex, FunctionIndex)).second)
-          report_fatal_error(Twine(Base->getName()) + ": table index " +
-                             Twine(TableIndex) + " has already been assigned!");
+        TableElems.push_back(FunctionIndex);
         registerFunctionType(*Base);
-      } else if (Rel.Symbol->hasTableIndex() && P.first->second != TableIndex) {
-        report_fatal_error(Twine(Rel.Symbol->getName()) +
-                           ": symbol has conflicting table indices " +
-                           Twine(P.first->second) + ", " + Twine(TableIndex));
       }
     };
 
@@ -1732,8 +1731,7 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
         report_fatal_error("symbols in .init_array should exist in symtab");
       if (!TargetSym.isFunction())
         report_fatal_error("symbols in .init_array should be for functions");
-      InitFuncs.push_back(
-          std::make_pair(Priority, TargetSym.getIndex()));
+      InitFuncs.push_back(std::make_pair(Priority, TargetSym.getIndex()));
     }
   }
 
@@ -1764,8 +1762,8 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
   if (Mode != DwoMode::DwoOnly) {
     writeLinkingMetaDataSection(SymbolInfos, InitFuncs, Comdats);
 
-    writeRelocSection(CodeSectionIndex, "CODE", CodeRelocations);
-    writeRelocSection(DataSectionIndex, "DATA", DataRelocations);
+    writeRelocSection(CodeSectionIndex, "CODE", CodeRelocations, true);
+    writeRelocSection(DataSectionIndex, "DATA", DataRelocations, false);
   }
   writeCustomRelocSections();
   if (ProducersSection)
