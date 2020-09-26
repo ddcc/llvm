@@ -1975,7 +1975,7 @@ def fno_force_emit_vtables : Flag<["-"], "fno-force-emit-vtables">, Group<f_Grou
 def fvirtual_function_elimination : Flag<["-"], "fvirtual-function-elimination">, Group<f_Group>,
   Flags<[CoreOption, CC1Option]>,
   HelpText<"Enables dead virtual function elimination optimization. Requires -flto=full">;
-def fno_virtual_function_elimination : Flag<["-"], "fno-virtual-function_elimination">, Group<f_Group>,
+def fno_virtual_function_elimination : Flag<["-"], "fno-virtual-function-elimination">, Group<f_Group>,
   Flags<[CoreOption]>;
 
 def fwrapv : Flag<["-"], "fwrapv">, Group<f_Group>, Flags<[CC1Option]>,
