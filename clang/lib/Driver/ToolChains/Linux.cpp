@@ -442,7 +442,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
          tools::arm::getARMFloatABI(*this, Args) == tools::arm::FloatABI::Hard))
       ArchName += "hf";
 
-    return "/lib/ld-musl-" + ArchName + ".so.1";
+    return "/lib/ld-musl-" + ArchName + "-hq.so.1";
   }
 
   std::string LibDir;
