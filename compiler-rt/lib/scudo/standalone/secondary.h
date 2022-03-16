@@ -245,8 +245,11 @@ public:
       }
     }
     if (Found) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wconditional-uninitialized"
       *H = reinterpret_cast<LargeBlock::Header *>(
           LargeBlock::addHeaderTag<Config>(HeaderPos));
+#pragma clang diagnostic pop
       *Zeroed = Entry.Time == 0;
       if (useMemoryTagging<Config>(Options))
         setMemoryPermission(Entry.CommitBase, Entry.CommitSize, 0, &Entry.Data);
@@ -395,7 +398,10 @@ private:
   atomic_s32 ReleaseToOsIntervalMs = {};
 
   CachedBlock Entries[Config::SecondaryCacheEntriesArraySize] = {};
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-length-array"
   CachedBlock Quarantine[Config::SecondaryCacheQuarantineSize] = {};
+#pragma clang diagnostic pop
 };
 
 template <typename Config> class MapAllocator {

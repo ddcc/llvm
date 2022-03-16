@@ -41,6 +41,8 @@ inline uint8_t extractTag(uptr Ptr) { return (Ptr >> 56) & 0xf; }
 
 inline constexpr bool archSupportsMemoryTagging() { return false; }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 inline uptr archMemoryTagGranuleSize() {
   UNREACHABLE("memory tagging not supported");
 }
@@ -54,6 +56,7 @@ inline uint8_t extractTag(uptr Ptr) {
   (void)Ptr;
   UNREACHABLE("memory tagging not supported");
 }
+#pragma clang diagnostic pop
 
 #endif
 
@@ -109,6 +112,8 @@ inline void enableSystemMemoryTaggingTestOnly() {
 
 inline bool systemSupportsMemoryTagging() { return false; }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 inline bool systemDetectsMemoryTagFaultsTestOnly() {
   UNREACHABLE("memory tagging not supported");
 }
@@ -116,6 +121,7 @@ inline bool systemDetectsMemoryTagFaultsTestOnly() {
 inline void enableSystemMemoryTaggingTestOnly() {
   UNREACHABLE("memory tagging not supported");
 }
+#pragma clang diagnostic pop
 
 #endif // SCUDO_LINUX
 
@@ -255,6 +261,8 @@ inline uptr loadTag(uptr Ptr) {
 
 #else
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 inline bool systemSupportsMemoryTagging() {
   UNREACHABLE("memory tagging not supported");
 }
@@ -298,6 +306,7 @@ inline uptr loadTag(uptr Ptr) {
   (void)Ptr;
   UNREACHABLE("memory tagging not supported");
 }
+#pragma clang diagnostic pop
 
 #endif
 
