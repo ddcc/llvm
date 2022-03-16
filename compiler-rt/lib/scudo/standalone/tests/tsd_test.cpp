@@ -230,7 +230,7 @@ TEST(ScudoTSDTest, TSDRegistryTSDsCount) {
     T.join();
   // The initial number of TSDs we get will be the minimum of the default count
   // and the number of CPUs.
-  EXPECT_LE(Pointers.size(), 8U);
+  EXPECT_LE(Pointers.size(), 8UL);
   Pointers.clear();
   auto Registry = Allocator->getTSDRegistry();
   // Increase the number of TSDs to 16.
@@ -246,5 +246,5 @@ TEST(ScudoTSDTest, TSDRegistryTSDsCount) {
   for (auto &T : Threads)
     T.join();
   // We should get 16 distinct TSDs back.
-  EXPECT_EQ(Pointers.size(), 16U);
+  EXPECT_EQ(Pointers.size(), 16UL);
 }

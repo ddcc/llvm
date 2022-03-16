@@ -61,7 +61,7 @@ TEST(ScudoCommonTest, Zeros) {
   EXPECT_EQ(std::count(P, P + N, 0), N);
 
   memset(P, 1, Size);
-  EXPECT_EQ(std::count(P, P + N, 0), 0);
+  EXPECT_EQ(std::count(P, P + N, 0), 0L);
 
   releasePagesToOS((uptr)P, 0, Size, &Data);
   EXPECT_EQ(std::count(P, P + N, 0), N);

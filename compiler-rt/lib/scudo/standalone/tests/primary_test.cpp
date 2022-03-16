@@ -292,5 +292,5 @@ SCUDO_TYPED_TEST(ScudoPrimaryTest, ReleaseToOS) {
   EXPECT_NE(P, nullptr);
   Cache.deallocate(ClassId, P);
   Cache.destroy(nullptr);
-  EXPECT_GT(Allocator->releaseToOS(), 0U);
+  EXPECT_GT(Allocator->releaseToOS(), 0UL);
 }

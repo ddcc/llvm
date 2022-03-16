@@ -42,13 +42,13 @@ TEST(ScudoQuarantineTest, QuarantineBatchMerge) {
 
   Into.merge(&From);
 
-  EXPECT_EQ(Into.Count, 2UL);
+  EXPECT_EQ(Into.Count, 2U);
   EXPECT_EQ(Into.Batch[0], FakePtr);
   EXPECT_EQ(Into.Batch[1], FakePtr);
   EXPECT_EQ(Into.Size, 12UL + sizeof(scudo::QuarantineBatch));
   EXPECT_EQ(Into.getQuarantinedSize(), 12UL);
 
-  EXPECT_EQ(From.Count, 0UL);
+  EXPECT_EQ(From.Count, 0U);
   EXPECT_EQ(From.Size, sizeof(scudo::QuarantineBatch));
   EXPECT_EQ(From.getQuarantinedSize(), 0UL);
 

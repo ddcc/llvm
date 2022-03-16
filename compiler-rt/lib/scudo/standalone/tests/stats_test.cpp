@@ -14,13 +14,13 @@ TEST(ScudoStatsTest, LocalStats) {
   scudo::LocalStats LStats;
   LStats.init();
   for (scudo::uptr I = 0; I < scudo::StatCount; I++)
-    EXPECT_EQ(LStats.get(static_cast<scudo::StatType>(I)), 0U);
+    EXPECT_EQ(LStats.get(static_cast<scudo::StatType>(I)), 0UL);
   LStats.add(scudo::StatAllocated, 4096U);
-  EXPECT_EQ(LStats.get(scudo::StatAllocated), 4096U);
+  EXPECT_EQ(LStats.get(scudo::StatAllocated), 4096UL);
   LStats.sub(scudo::StatAllocated, 4096U);
-  EXPECT_EQ(LStats.get(scudo::StatAllocated), 0U);
+  EXPECT_EQ(LStats.get(scudo::StatAllocated), 0UL);
   LStats.set(scudo::StatAllocated, 4096U);
-  EXPECT_EQ(LStats.get(scudo::StatAllocated), 4096U);
+  EXPECT_EQ(LStats.get(scudo::StatAllocated), 4096UL);
 }
 
 TEST(ScudoStatsTest, GlobalStats) {
@@ -29,18 +29,18 @@ TEST(ScudoStatsTest, GlobalStats) {
   scudo::uptr Counters[scudo::StatCount] = {};
   GStats.get(Counters);
   for (scudo::uptr I = 0; I < scudo::StatCount; I++)
-    EXPECT_EQ(Counters[I], 0U);
+    EXPECT_EQ(Counters[I], 0UL);
   scudo::LocalStats LStats;
   LStats.init();
   GStats.link(&LStats);
   for (scudo::uptr I = 0; I < scudo::StatCount; I++)
-    LStats.add(static_cast<scudo::StatType>(I), 4096U);
+    LStats.add(static_cast<scudo::StatType>(I), 4096UL);
   GStats.get(Counters);
   for (scudo::uptr I = 0; I < scudo::StatCount; I++)
-    EXPECT_EQ(Counters[I], 4096U);
+    EXPECT_EQ(Counters[I], 4096UL);
   // Unlinking the local stats move numbers to the global stats.
   GStats.unlink(&LStats);
   GStats.get(Counters);
   for (scudo::uptr I = 0; I < scudo::StatCount; I++)
-    EXPECT_EQ(Counters[I], 4096U);
+    EXPECT_EQ(Counters[I], 4096UL);
 }

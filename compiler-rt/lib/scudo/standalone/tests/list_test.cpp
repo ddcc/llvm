@@ -73,9 +73,9 @@ template <typename ListT> static void testListCommon(void) {
   ListT L;
   L.clear();
 
-  EXPECT_EQ(L.size(), 0U);
+  EXPECT_EQ(L.size(), 0UL);
   L.push_back(X);
-  EXPECT_EQ(L.size(), 1U);
+  EXPECT_EQ(L.size(), 1UL);
   EXPECT_EQ(L.back(), X);
   EXPECT_EQ(L.front(), X);
   L.pop_front();
@@ -83,7 +83,7 @@ template <typename ListT> static void testListCommon(void) {
   L.checkConsistency();
 
   L.push_front(X);
-  EXPECT_EQ(L.size(), 1U);
+  EXPECT_EQ(L.size(), 1UL);
   EXPECT_EQ(L.back(), X);
   EXPECT_EQ(L.front(), X);
   L.pop_front();
@@ -93,13 +93,13 @@ template <typename ListT> static void testListCommon(void) {
   L.push_front(X);
   L.push_front(Y);
   L.push_front(Z);
-  EXPECT_EQ(L.size(), 3U);
+  EXPECT_EQ(L.size(), 3UL);
   EXPECT_EQ(L.front(), Z);
   EXPECT_EQ(L.back(), X);
   L.checkConsistency();
 
   L.pop_front();
-  EXPECT_EQ(L.size(), 2U);
+  EXPECT_EQ(L.size(), 2UL);
   EXPECT_EQ(L.front(), Y);
   EXPECT_EQ(L.back(), X);
   L.pop_front();
@@ -110,13 +110,13 @@ template <typename ListT> static void testListCommon(void) {
   L.push_back(X);
   L.push_back(Y);
   L.push_back(Z);
-  EXPECT_EQ(L.size(), 3U);
+  EXPECT_EQ(L.size(), 3UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), Z);
   L.checkConsistency();
 
   L.pop_front();
-  EXPECT_EQ(L.size(), 2U);
+  EXPECT_EQ(L.size(), 2UL);
   EXPECT_EQ(L.front(), Y);
   EXPECT_EQ(L.back(), Z);
   L.pop_front();
@@ -138,12 +138,12 @@ TEST(ScudoListTest, SinglyLinkedList) {
   L.push_back(Y);
   L.push_back(Z);
   L.extract(X, Y);
-  EXPECT_EQ(L.size(), 2U);
+  EXPECT_EQ(L.size(), 2UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), Z);
   L.checkConsistency();
   L.extract(X, Z);
-  EXPECT_EQ(L.size(), 1U);
+  EXPECT_EQ(L.size(), 1UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), X);
   L.checkConsistency();
@@ -173,7 +173,7 @@ TEST(ScudoListTest, SinglyLinkedList) {
   L1.append_back(&L2);
   EXPECT_EQ(L1.back(), X);
   EXPECT_EQ(L1.front(), X);
-  EXPECT_EQ(L1.size(), 1U);
+  EXPECT_EQ(L1.size(), 1UL);
 }
 
 TEST(ScudoListTest, DoublyLinkedList) {
@@ -184,12 +184,12 @@ TEST(ScudoListTest, DoublyLinkedList) {
   L.push_back(Y);
   L.push_back(Z);
   L.remove(Y);
-  EXPECT_EQ(L.size(), 2U);
+  EXPECT_EQ(L.size(), 2UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), Z);
   L.checkConsistency();
   L.remove(Z);
-  EXPECT_EQ(L.size(), 1U);
+  EXPECT_EQ(L.size(), 1UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), X);
   L.checkConsistency();
@@ -198,12 +198,12 @@ TEST(ScudoListTest, DoublyLinkedList) {
 
   L.push_back(X);
   L.insert(Y, X);
-  EXPECT_EQ(L.size(), 2U);
+  EXPECT_EQ(L.size(), 2UL);
   EXPECT_EQ(L.front(), Y);
   EXPECT_EQ(L.back(), X);
   L.checkConsistency();
   L.remove(Y);
-  EXPECT_EQ(L.size(), 1U);
+  EXPECT_EQ(L.size(), 1UL);
   EXPECT_EQ(L.front(), X);
   EXPECT_EQ(L.back(), X);
   L.checkConsistency();

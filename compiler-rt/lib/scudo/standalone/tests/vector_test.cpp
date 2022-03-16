@@ -12,12 +12,12 @@
 
 TEST(ScudoVectorTest, Basic) {
   scudo::Vector<int> V;
-  EXPECT_EQ(V.size(), 0U);
+  EXPECT_EQ(V.size(), 0UL);
   V.push_back(42);
-  EXPECT_EQ(V.size(), 1U);
+  EXPECT_EQ(V.size(), 1UL);
   EXPECT_EQ(V[0], 42);
   V.push_back(43);
-  EXPECT_EQ(V.size(), 2U);
+  EXPECT_EQ(V.size(), 2UL);
   EXPECT_EQ(V[0], 42);
   EXPECT_EQ(V[1], 43);
 }
@@ -26,7 +26,7 @@ TEST(ScudoVectorTest, Stride) {
   scudo::Vector<scudo::uptr> V;
   for (scudo::uptr I = 0; I < 1000; I++) {
     V.push_back(I);
-    EXPECT_EQ(V.size(), I + 1U);
+    EXPECT_EQ(V.size(), I + 1UL);
     EXPECT_EQ(V[I], I);
   }
   for (scudo::uptr I = 0; I < 1000; I++)
@@ -37,7 +37,7 @@ TEST(ScudoVectorTest, ResizeReduction) {
   scudo::Vector<int> V;
   V.push_back(0);
   V.push_back(0);
-  EXPECT_EQ(V.size(), 2U);
+  EXPECT_EQ(V.size(), 2UL);
   V.resize(1);
-  EXPECT_EQ(V.size(), 1U);
+  EXPECT_EQ(V.size(), 1UL);
 }

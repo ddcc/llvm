@@ -66,7 +66,7 @@ protected:
 using MemtagDeathTest = MemtagTest;
 
 TEST_F(MemtagTest, ArchMemoryTagGranuleSize) {
-  EXPECT_GT(archMemoryTagGranuleSize(), 1u);
+  EXPECT_GT(archMemoryTagGranuleSize(), 1ul);
   EXPECT_TRUE(isPowerOfTwo(archMemoryTagGranuleSize()));
 }
 
@@ -76,11 +76,11 @@ TEST_F(MemtagTest, ExtractTag) {
   // expected range.
   for (u64 Top = 0; Top < 0x100; ++Top)
     Tags = Tags | (1u << extractTag(Addr | (Top << 56)));
-  EXPECT_EQ(0xffffull, Tags);
+  EXPECT_EQ(0xfffful, Tags);
 }
 
 TEST_F(MemtagDeathTest, AddFixedTag) {
-  for (uptr Tag = 0; Tag < 0x10; ++Tag)
+  for (uint8_t Tag = 0; Tag < 0x10; ++Tag)
     EXPECT_EQ(Tag, extractTag(addFixedTag(Addr, Tag)));
   if (SCUDO_DEBUG) {
     EXPECT_DEBUG_DEATH(addFixedTag(Addr, 16), "");
@@ -111,12 +111,12 @@ TEST_F(MemtagTest, SelectRandomTag) {
     uptr Tags = 0;
     for (uptr I = 0; I < 100000; ++I)
       Tags = Tags | (1u << extractTag(selectRandomTag(Ptr, 0)));
-    EXPECT_EQ(0xfffeull, Tags);
+    EXPECT_EQ(0xfffeul, Tags);
   }
 }
 
 TEST_F(MemtagTest, SelectRandomTagWithMask) {
-  for (uptr j = 0; j < 32; ++j) {
+  for (uint8_t j = 0; j < 32; ++j) {
     for (uptr i = 0; i < 1000; ++i)
       EXPECT_NE(j, extractTag(selectRandomTag(Addr, 1ull << j)));
   }

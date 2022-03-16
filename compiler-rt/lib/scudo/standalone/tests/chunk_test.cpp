@@ -55,7 +55,8 @@ TEST(ScudoChunkTest, ChunkCmpXchg) {
   scudo::Chunk::compareExchangeHeader(Cookie, P, &NewHeader, &OldHeader);
   NewHeader = {};
   EXPECT_TRUE(scudo::Chunk::isValid(Cookie, P, &NewHeader));
-  EXPECT_EQ(NewHeader.State, scudo::Chunk::State::Quarantined);
+  EXPECT_EQ(NewHeader.State,
+            static_cast<scudo::u8>(scudo::Chunk::State::Quarantined));
   EXPECT_FALSE(scudo::Chunk::isValid(InvalidCookie, P, &NewHeader));
   free(Block);
 }

@@ -139,7 +139,7 @@ SCUDO_TYPED_TEST(ScudoCombinedTest, IsOwned) {
     StackBuffer[I] = 0x42U;
   EXPECT_FALSE(Allocator->isOwned(&StackBuffer[scudo::Chunk::getHeaderSize()]));
   for (scudo::uptr I = 0; I < sizeof(StackBuffer); I++)
-    EXPECT_EQ(StackBuffer[I], 0x42U);
+    EXPECT_EQ(StackBuffer[I], static_cast<scudo::u8>(0x42U));
 }
 
 template <class Config>
@@ -204,7 +204,7 @@ SCUDO_TYPED_TEST(ScudoCombinedTest, ZeroContents) {
       void *P = Allocator->allocate(Size, Origin, 1U << MinAlignLog, true);
       EXPECT_NE(P, nullptr);
       for (scudo::uptr I = 0; I < Size; I++)
-        ASSERT_EQ((reinterpret_cast<char *>(P))[I], 0);
+        ASSERT_EQ((reinterpret_cast<char *>(P))[I], static_cast<char>(0));
       memset(P, 0xaa, Size);
       Allocator->deallocate(P, Origin, Size);
     }
@@ -222,7 +222,7 @@ SCUDO_TYPED_TEST(ScudoCombinedTest, ZeroFill) {
       void *P = Allocator->allocate(Size, Origin, 1U << MinAlignLog, false);
       EXPECT_NE(P, nullptr);
       for (scudo::uptr I = 0; I < Size; I++)
-        ASSERT_EQ((reinterpret_cast<char *>(P))[I], 0);
+        ASSERT_EQ((reinterpret_cast<char *>(P))[I], static_cast<char>(0));
       memset(P, 0xaa, Size);
       Allocator->deallocate(P, Origin, Size);
     }
@@ -592,7 +592,7 @@ TEST(ScudoCombinedTest, FullRegion) {
       V.pop_back();
     }
   }
-  EXPECT_EQ(FailedAllocationsCount, 0U);
+  EXPECT_EQ(FailedAllocationsCount, 0UL);
 }
 
 // Ensure that releaseToOS can be called prior to any other allocator
@@ -673,7 +673,7 @@ SCUDO_TYPED_TEST(ScudoCombinedTest, DisableMemInit) {
     for (unsigned I = 0; I != Ptrs.size(); ++I) {
       Ptrs[I] = Allocator->allocate(Size, Origin, 1U << MinAlignLog, true);
       for (scudo::uptr J = 0; J < Size; ++J)
-        ASSERT_EQ((reinterpret_cast<char *>(Ptrs[I]))[J], 0);
+        ASSERT_EQ((reinterpret_cast<char *>(Ptrs[I]))[J], static_cast<char>(0));
     }
   }
 
