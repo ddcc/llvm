@@ -45,18 +45,31 @@ inline bool checkPosixMemalignAlignment(uptr Alignment) {
 // Returns true if calloc(Size, N) overflows on Size*N calculation. Use a
 // builtin supported by recent clang & GCC if it exists, otherwise fallback to a
 // costly division.
-inline bool checkForCallocOverflow(uptr Size, uptr N, uptr *Product) {
-#if __has_builtin(__builtin_umull_overflow) && (SCUDO_WORDSIZE == 64U)
-  return __builtin_umull_overflow(Size, N, Product);
-#elif __has_builtin(__builtin_umul_overflow) && (SCUDO_WORDSIZE == 32U)
-  return __builtin_umul_overflow(Size, N, Product);
-#else
+template <typename T = scudo::uptr>
+inline bool checkForCallocOverflow(T Size, T N, T *Product) {
   *Product = Size * N;
   if (!Size)
     return false;
   return (*Product / Size) != N;
-#endif
 }
+
+#if __has_builtin(__builtin_umull_overflow)
+template <>
+inline bool checkForCallocOverflow<unsigned long>(unsigned long Size,
+                                                  unsigned long N,
+                                                  unsigned long *Product) {
+  return __builtin_umull_overflow(Size, N, Product);
+}
+#endif
+
+#if __has_builtin(__builtin_umul_overflow)
+template <>
+inline bool checkForCallocOverflow<unsigned int>(unsigned int Size,
+                                                 unsigned int N,
+                                                 unsigned int *Product) {
+  return __builtin_umul_overflow(Size, N, Product);
+}
+#endif
 
 // Returns true if the size passed to pvalloc overflows when rounded to the next
 // multiple of PageSize.
