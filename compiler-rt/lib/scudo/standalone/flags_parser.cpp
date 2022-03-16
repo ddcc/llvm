@@ -11,7 +11,6 @@
 #include "report.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 namespace scudo {
 

@@ -10,9 +10,6 @@
 
 #include "bytemap.h"
 
-#include <pthread.h>
-#include <string.h>
-
 template <typename T> void testMap(T &Map, scudo::uptr Size) {
   Map.init();
   for (scudo::uptr I = 0; I < Size; I += 7)

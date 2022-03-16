@@ -11,7 +11,6 @@
 #include "mutex.h"
 
 #include <pthread.h>
-#include <string.h>
 
 class TestData {
 public:

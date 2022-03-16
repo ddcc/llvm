@@ -117,6 +117,7 @@ inline void yieldProcessor(u8 Count) {
 // Platform specific functions.
 
 extern uptr PageSizeCached;
+uptr getPageSize();
 uptr getPageSizeSlow();
 inline uptr getPageSizeCached() {
   // Bionic uses a hardcoded value.

@@ -11,8 +11,6 @@
 #include "flags.h"
 #include "flags_parser.h"
 
-#include <string.h>
-
 static const char FlagName[] = "flag_name";
 static const char FlagDesc[] = "flag description";
 

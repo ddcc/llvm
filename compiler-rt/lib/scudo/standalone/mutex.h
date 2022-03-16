@@ -12,8 +12,6 @@
 #include "atomic_helpers.h"
 #include "common.h"
 
-#include <string.h>
-
 #if SCUDO_FUCHSIA
 #include <lib/sync/mutex.h> // for sync_mutex_t
 #endif

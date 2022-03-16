@@ -11,8 +11,6 @@
 
 #include "common.h"
 
-#include <string.h>
-
 namespace scudo {
 
 // A low-level vector based on map. May incur a significant memory overhead for

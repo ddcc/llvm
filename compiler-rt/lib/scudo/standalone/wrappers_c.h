@@ -19,6 +19,9 @@ typedef size_t __scudo_mallinfo_data_t;
 typedef int __scudo_mallinfo_data_t;
 #endif
 
+extern "C" void malloc_postinit();
+extern scudo::Allocator<scudo::Config, malloc_postinit> Allocator;
+
 struct __scudo_mallinfo {
   __scudo_mallinfo_data_t arena;
   __scudo_mallinfo_data_t ordblks;

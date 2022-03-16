@@ -12,8 +12,6 @@
 #include "release.h"
 #include "size_class_map.h"
 
-#include <string.h>
-
 #include <algorithm>
 #include <random>
 #include <set>
