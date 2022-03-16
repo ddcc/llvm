@@ -24,19 +24,19 @@ struct QuarantineBatch {
   u32 Count;
   void *Batch[MaxCount];
 
-  void init(void *Ptr, uptr Size) {
+  void init(void *Ptr, uptr Sz) {
     Count = 1;
     Batch[0] = Ptr;
-    this->Size = Size + sizeof(QuarantineBatch); // Account for the Batch Size.
+    this->Size = Sz + sizeof(QuarantineBatch); // Account for the Batch Size.
   }
 
   // The total size of quarantined nodes recorded in this batch.
   uptr getQuarantinedSize() const { return Size - sizeof(QuarantineBatch); }
 
-  void push_back(void *Ptr, uptr Size) {
+  void push_back(void *Ptr, uptr Sz) {
     DCHECK_LT(Count, MaxCount);
     Batch[Count++] = Ptr;
-    this->Size += Size;
+    this->Size += Sz;
   }
 
   bool canMerge(const QuarantineBatch *const From) const {
@@ -71,16 +71,16 @@ public:
   // Memory used for internal accounting.
   uptr getOverheadSize() const { return List.size() * sizeof(QuarantineBatch); }
 
-  void enqueue(Callback Cb, void *Ptr, uptr Size) {
+  void enqueue(Callback Cb, void *Ptr, uptr Sz) {
     if (List.empty() || List.back()->Count == QuarantineBatch::MaxCount) {
       QuarantineBatch *B =
           reinterpret_cast<QuarantineBatch *>(Cb.allocate(sizeof(*B)));
       DCHECK(B);
-      B->init(Ptr, Size);
+      B->init(Ptr, Sz);
       enqueueBatch(B);
     } else {
-      List.back()->push_back(Ptr, Size);
-      addToSize(Size);
+      List.back()->push_back(Ptr, Sz);
+      addToSize(Sz);
     }
   }
 
@@ -242,7 +242,7 @@ private:
   atomic_uptr MaxSize = {};
   alignas(SCUDO_CACHE_LINE_SIZE) atomic_uptr MaxCacheSize = {};
 
-  void NOINLINE recycle(uptr MinSize, Callback Cb) {
+  void NOINLINE recycle(uptr MinSz, Callback Cb) {
     CacheT Tmp;
     Tmp.init();
     {
@@ -266,7 +266,7 @@ private:
       }
       // Extract enough chunks from the quarantine to get below the max
       // quarantine size and leave some leeway for the newly quarantined chunks.
-      while (Cache.getSize() > MinSize)
+      while (Cache.getSize() > MinSz)
         Tmp.enqueueBatch(Cache.dequeueBatch());
     }
     RecycleMutex.unlock();

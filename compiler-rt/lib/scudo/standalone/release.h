@@ -17,8 +17,8 @@ namespace scudo {
 
 class ReleaseRecorder {
 public:
-  ReleaseRecorder(uptr Base, MapPlatformData *Data = nullptr)
-      : Base(Base), Data(Data) {}
+  ReleaseRecorder(uptr _Base, MapPlatformData *_Data = nullptr)
+      : Base(_Base), Data(_Data) {}
 
   uptr getReleasedRangesCount() const { return ReleasedRangesCount; }
 
@@ -145,8 +145,8 @@ private:
 
 template <class ReleaseRecorderT> class FreePagesRangeTracker {
 public:
-  explicit FreePagesRangeTracker(ReleaseRecorderT *Recorder)
-      : Recorder(Recorder), PageSizeLog(getLog2(getPageSizeCached())) {}
+  explicit FreePagesRangeTracker(ReleaseRecorderT *_Recorder)
+      : Recorder(_Recorder), PageSizeLog(getLog2(getPageSizeCached())) {}
 
   void processNextPage(bool Freed) {
     if (Freed) {
